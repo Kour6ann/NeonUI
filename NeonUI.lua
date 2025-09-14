@@ -188,28 +188,46 @@ end
 
 -- 🖼️ Basic UI API (Upgraded with Tabs + Layout)
 
-function UI:CreateMain(options)
-    local main = Instance.new("Frame", ScreenGui)
-    main.Name = "MainFrame"
-    main.Size = UDim2.new(0, 600, 0, 400)
-    main.Position = UDim2.new(0.5, -300, 0.5, -200)
-    main.BackgroundColor3 = options.Theme and options.Theme.Background or Color3.fromRGB(25,25,25)
-    main.Active = true
-    main.Draggable = true
-    UI.MainFrame = main
+function UI:CreateTab(title, icon)
+    -- Tab button
+    local tabBtn = Instance.new("TextButton", UI.TabBar)
+    tabBtn.Size = UDim2.new(0,100,1,0)
+    tabBtn.Text = title
+    tabBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    tabBtn.TextColor3 = Color3.new(1,1,1)
 
-    -- Tab bar
-    local tabBar = Instance.new("Frame", main)
-    tabBar.Size = UDim2.new(1,0,0,30)
-    tabBar.BackgroundColor3 = Color3.fromRGB(20,20,20)
-    local layout = Instance.new("UIListLayout", tabBar)
-    layout.FillDirection = Enum.FillDirection.Horizontal
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    -- Tab content
+    local tab = Instance.new("ScrollingFrame", UI.MainFrame)
+    tab.Name = title
+    tab.Size = UDim2.new(1,-10,1,-70) -- give space for tab bar & title
+    tab.Position = UDim2.new(0,5,0,65)
+    tab.BackgroundTransparency = 1
+    tab.Visible = false
+    tab.ScrollBarThickness = 6
+
+    -- Vertical layout
+    local layout = Instance.new("UIListLayout", tab)
+    layout.FillDirection = Enum.FillDirection.Vertical
     layout.Padding = UDim.new(0,5)
-    UI.TabBar = tabBar
-    UI.CurrentTab = nil
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
 
-    return UI
+    UI.Tabs[title] = tab
+
+    -- Click to switch
+    tabBtn.MouseButton1Click:Connect(function()
+        for _, t in pairs(UI.Tabs) do
+            t.Visible = false
+        end
+        tab.Visible = true
+        UI.CurrentTab = tab
+    end)
+
+    if not UI.CurrentTab then
+        UI.CurrentTab = tab
+        tab.Visible = true
+    end
+
+    return tab
 end
 
 function UI:CreateTab(title, icon)
