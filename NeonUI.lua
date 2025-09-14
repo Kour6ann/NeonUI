@@ -1,9 +1,8 @@
--- NeonUI.lua (Robust, full-featured, safe)
--- Replace your existing NeonUI.lua with this file.
-
+-- NeonUI.lua (Fixed — dropdown popup position, real draggable slider, robust)
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
-local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -16,24 +15,19 @@ UI.ConfigsFolder = "Kour6anHubConfigs"
 UI.SettingsFile = UI.ConfigsFolder .. "/settings.json"
 UI.LastConfigFile = UI.ConfigsFolder .. "/lastConfig.json"
 
--- Ensure configs folder exists (supported by many executors)
+-- ensure config folder if executor supports it
 if makefolder and not isfolder(UI.ConfigsFolder) then
-    pcall(function() makefolder(UI.ConfigsFolder) end)
+    pcall(makefolder, UI.ConfigsFolder)
 end
 
--- Create or reuse ScreenGui
-local function getScreenGui()
-    local parent = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
-    if not parent then
-        -- fallback - safety
-        parent = game:GetService("CoreGui") or LocalPlayer:WaitForChild("PlayerGui")
-    end
-
+-- create ScreenGui (replace any existing)
+local function createScreenGui()
+    local parent = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") or game:GetService("CoreGui")
+    if not parent then parent = game:GetService("CoreGui") end
     local existing = parent:FindFirstChild("Kour6anHubUI")
     if existing and existing:IsA("ScreenGui") then
-        existing:Destroy()
+        pcall(function() existing:Destroy() end)
     end
-
     local sg = Instance.new("ScreenGui")
     sg.Name = "Kour6anHubUI"
     sg.ResetOnSpawn = false
@@ -41,54 +35,48 @@ local function getScreenGui()
     return sg
 end
 
-local ScreenGui = getScreenGui()
+local ScreenGui = createScreenGui()
 
--- Simple notification: prints and transient GUI popup
+-- small helper to clamp
+local function clamp(x, a, b) if x < a then return a elseif x > b then return b else return x end end
+
+-- lightweight notify (print + transient frame)
 function UI:CreateNotify(opts)
     pcall(function()
         print("[NOTIFY]", opts.title or "Notify", opts.description or "")
-        -- lightweight visual toast (non-intrusive)
-        local frame = Instance.new("Frame")
-        frame.Size = UDim2.new(0, 300, 0, 50)
-        frame.Position = UDim2.new(0.5, -150, 0.1, 0)
-        frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
-        frame.BorderSizePixel = 0
-        frame.Parent = ScreenGui
-
-        local title = Instance.new("TextLabel", frame)
-        title.Size = UDim2.new(1, -10, 0, 20)
-        title.Position = UDim2.new(0, 5, 0, 3)
-        title.BackgroundTransparency = 1
-        title.Text = opts.title or ""
-        title.TextColor3 = Color3.new(1,1,1)
-        title.TextScaled = false
-        title.Font = Enum.Font.SourceSansBold
-
-        local desc = Instance.new("TextLabel", frame)
-        desc.Size = UDim2.new(1, -10, 0, 24)
-        desc.Position = UDim2.new(0, 5, 0, 22)
-        desc.BackgroundTransparency = 1
-        desc.Text = opts.description or ""
-        desc.TextColor3 = Color3.new(0.9,0.9,0.9)
-        desc.TextWrapped = true
-        desc.TextXAlignment = Enum.TextXAlignment.Left
-
-        task.defer(function()
-            task.wait(3.0)
-            pcall(function() frame:Destroy() end)
-        end)
+        local f = Instance.new("Frame", ScreenGui)
+        f.Size = UDim2.new(0, 320, 0, 56)
+        f.Position = UDim2.new(0.5, -160, 0.08, 0)
+        f.BackgroundColor3 = Color3.fromRGB(28,28,28)
+        f.BorderSizePixel = 0
+        local t = Instance.new("TextLabel", f)
+        t.Size = UDim2.new(1, -12, 0, 18)
+        t.Position = UDim2.new(0, 6, 0, 4)
+        t.BackgroundTransparency = 1
+        t.Text = opts.title or ""
+        t.TextColor3 = Color3.new(1,1,1)
+        t.Font = Enum.Font.SourceSansBold
+        t.TextSize = 16
+        local d = Instance.new("TextLabel", f)
+        d.Size = UDim2.new(1, -12, 0, 28)
+        d.Position = UDim2.new(0, 6, 0, 22)
+        d.BackgroundTransparency = 1
+        d.Text = opts.description or ""
+        d.TextColor3 = Color3.new(0.9,0.9,0.9)
+        d.TextWrapped = true
+        task.delay(3, function() pcall(function() f:Destroy() end) end)
     end)
 end
 
--- Settings (save/load)
+-- Settings save/load (defensive)
 function UI:LoadSettings()
     UI.Settings = { AutoLoad = true }
     if readfile and isfile and isfile(UI.SettingsFile) then
-        local ok, data = pcall(function() return readfile(UI.SettingsFile) end)
-        if ok and data then
-            local ok2, decoded = pcall(function() return HttpService:JSONDecode(data) end)
-            if ok2 and type(decoded) == "table" then
-                UI.Settings = decoded
+        local ok, raw = pcall(function() return readfile(UI.SettingsFile) end)
+        if ok and raw then
+            local ok2, dec = pcall(function() return HttpService:JSONDecode(raw) end)
+            if ok2 and type(dec) == "table" then
+                UI.Settings = dec
             end
         end
     end
@@ -96,10 +84,9 @@ end
 
 function UI:SaveSettings()
     if writefile then
-        local ok, encoded = pcall(function() return HttpService:JSONEncode(UI.Settings) end)
-        if ok and encoded then
-            pcall(function() writefile(UI.SettingsFile, encoded) end)
-        end
+        pcall(function()
+            writefile(UI.SettingsFile, HttpService:JSONEncode(UI.Settings or {}))
+        end)
     end
 end
 
@@ -111,9 +98,9 @@ end
 
 local function loadLastConfig()
     if readfile and isfile and isfile(UI.LastConfigFile) then
-        local ok, d = pcall(function() return readfile(UI.LastConfigFile) end)
-        if ok and d then
-            local ok2, dec = pcall(function() return HttpService:JSONDecode(d) end)
+        local ok, raw = pcall(function() return readfile(UI.LastConfigFile) end)
+        if ok and raw then
+            local ok2, dec = pcall(function() return HttpService:JSONDecode(raw) end)
             if ok2 and dec and dec.last then return dec.last end
         end
     end
@@ -135,11 +122,11 @@ function UI:LoadConfig(profileName)
     profileName = profileName or "Default"
     local path = UI.ConfigsFolder .. "/" .. profileName .. ".json"
     if readfile and isfile and isfile(path) then
-        local ok, data = pcall(function() return readfile(path) end)
-        if ok and data then
-            local ok2, decoded = pcall(function() return HttpService:JSONDecode(data) end)
-            if ok2 and decoded then
-                UI.Config = decoded
+        local ok, raw = pcall(function() return readfile(path) end)
+        if ok and raw then
+            local ok2, dec = pcall(function() return HttpService:JSONDecode(raw) end)
+            if ok2 and dec then
+                UI.Config = dec
                 saveLastConfig(profileName)
                 UI:CreateNotify({ title = "Config", description = "Loaded " .. profileName })
                 return
@@ -149,28 +136,25 @@ function UI:LoadConfig(profileName)
     UI:CreateNotify({ title = "Config", description = "No config named " .. profileName })
 end
 
--- UI core: CreateMain with titlebar, tabbar, minimize/close
+-- CreateMain: titlebar, tabbar, minimize/close (defensive)
 function UI:CreateMain(options)
     options = options or {}
-    -- clear if exists
     if UI.MainFrame and UI.MainFrame.Parent then
         pcall(function() UI.MainFrame:Destroy() end)
     end
 
-    local main = Instance.new("Frame")
+    local main = Instance.new("Frame", ScreenGui)
     main.Name = "MainFrame"
     main.Size = UDim2.new(0, 640, 0, 420)
     main.Position = UDim2.new(0.5, -320, 0.5, -210)
     main.BackgroundColor3 = (options.Theme and options.Theme.Background) or Color3.fromRGB(25,25,25)
     main.Active = true
     main.Draggable = true
-    main.Parent = ScreenGui
     UI.MainFrame = main
 
-    -- Titlebar
     local titleBar = Instance.new("Frame", main)
     titleBar.Name = "TitleBar"
-    titleBar.Size = UDim2.new(1, 0, 0, 32)
+    titleBar.Size = UDim2.new(1, 0, 0, 36)
     titleBar.Position = UDim2.new(0, 0, 0, 0)
     titleBar.BackgroundColor3 = Color3.fromRGB(20,20,20)
 
@@ -184,47 +168,40 @@ function UI:CreateMain(options)
     titleLabel.Font = Enum.Font.SourceSansBold
     titleLabel.TextSize = 18
 
-    local function makeTitleButton(text, xOffset)
-        local btn = Instance.new("TextButton", titleBar)
-        btn.Size = UDim2.new(0, 28, 1, -6)
-        btn.Position = UDim2.new(1, xOffset, 0, 3)
-        btn.Text = text
-        btn.Font = Enum.Font.SourceSansBold
-        btn.TextSize = 18
-        btn.TextColor3 = Color3.new(1,1,1)
-        btn.BackgroundColor3 = Color3.fromRGB(45,45,45)
-        btn.BorderSizePixel = 0
-        return btn
+    local function makeTitleBtn(txt, xOffset)
+        local b = Instance.new("TextButton", titleBar)
+        b.Size = UDim2.new(0, 28, 1, -8)
+        b.Position = UDim2.new(1, xOffset, 0, 4)
+        b.Text = txt
+        b.Font = Enum.Font.SourceSansBold
+        b.TextSize = 18
+        b.TextColor3 = Color3.new(1,1,1)
+        b.BackgroundColor3 = Color3.fromRGB(45,45,45)
+        b.BorderSizePixel = 0
+        return b
     end
 
-    local minBtn = makeTitleButton("-", -80)
-    local closeBtn = makeTitleButton("X", -46)
+    local minBtn = makeTitleBtn("-", -86)
+    local closeBtn = makeTitleBtn("X", -50)
 
-    -- TabBar (buttons)
     local tabBar = Instance.new("Frame", main)
     tabBar.Name = "TabBar"
-    tabBar.Size = UDim2.new(1, 0, 0, 34)
-    tabBar.Position = UDim2.new(0, 0, 0, 32)
+    tabBar.Size = UDim2.new(1, 0, 0, 36)
+    tabBar.Position = UDim2.new(0, 0, 0, 36)
     tabBar.BackgroundColor3 = (options.Theme and options.Theme.NavBackground) or Color3.fromRGB(30,30,30)
-
-    local listLayout = Instance.new("UIListLayout", tabBar)
-    listLayout.FillDirection = Enum.FillDirection.Horizontal
-    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    listLayout.Padding = UDim.new(0, 6)
-
+    local layout = Instance.new("UIListLayout", tabBar)
+    layout.FillDirection = Enum.FillDirection.Horizontal
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 6)
     UI.TabBar = tabBar
     UI.TitleBar = titleBar
 
-    -- store original size for restore
     local originalSize = main.Size
 
-    -- Minimize: shrink to titlebar only and hide all other children (including TabBar)
     minBtn.MouseButton1Click:Connect(function()
         if not UI.Minimized then
             originalSize = main.Size
-            -- shrink
             main.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, titleBar.Size.Y.Offset)
-            -- hide everything except titlebar
             for _, child in ipairs(main:GetChildren()) do
                 if child ~= titleBar then
                     child.Visible = false
@@ -232,7 +209,6 @@ function UI:CreateMain(options)
             end
             UI.Minimized = true
         else
-            -- restore
             main.Size = originalSize
             for name, tab in pairs(UI.Tabs) do
                 if tab and tab:IsA("ScrollingFrame") then
@@ -244,7 +220,6 @@ function UI:CreateMain(options)
         end
     end)
 
-    -- Close
     closeBtn.MouseButton1Click:Connect(function()
         pcall(function() main:Destroy() end)
     end)
@@ -252,29 +227,25 @@ function UI:CreateMain(options)
     return UI
 end
 
--- CreateTab: scrolling frame + UIListLayout + tab button
+-- CreateTab: scrolling area with UIListLayout (auto stacking)
 function UI:CreateTab(title)
-    if not UI.MainFrame then
-        error("CreateMain must be called before CreateTab()", 2)
-    end
+    if not UI.MainFrame then error("Call CreateMain() before CreateTab()", 2) end
 
-    -- create the scrolling content area
     local tab = Instance.new("ScrollingFrame", UI.MainFrame)
     tab.Name = tostring(title)
-    tab.Size = UDim2.new(1, -16, 1, -72) -- leaves space for titlebar and tabbar
-    tab.Position = UDim2.new(0, 8, 0, 68)
+    tab.Size = UDim2.new(1, -16, 1, -84) -- space for title + tabbar
+    tab.Position = UDim2.new(0, 8, 0, 76)
     tab.BackgroundTransparency = 1
     tab.ScrollBarThickness = 6
     tab.Visible = false
-    tab.CanvasSize = UDim2.new(0, 0, 0, 0) -- will auto expand with UIListLayout
+    tab.CanvasSize = UDim2.new(0,0,0,0)
 
-    local layout = Instance.new("UIListLayout", tab)
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Padding = UDim.new(0, 6)
+    local list = Instance.new("UIListLayout", tab)
+    list.SortOrder = Enum.SortOrder.LayoutOrder
+    list.Padding = UDim.new(0, 6)
 
     UI.Tabs[title] = tab
 
-    -- create tab button in tabBar
     local btn = Instance.new("TextButton", UI.TabBar)
     btn.Name = "TabBtn_" .. tostring(title)
     btn.Size = UDim2.new(0, 120, 1, -10)
@@ -288,15 +259,13 @@ function UI:CreateTab(title)
 
     btn.MouseButton1Click:Connect(function()
         for n, t in pairs(UI.Tabs) do
-            if t and t:IsA("ScrollingFrame") then
-                t.Visible = false
-            end
+            if t and t:IsA("ScrollingFrame") then t.Visible = false end
         end
         tab.Visible = true
         UI.ActiveTab = title
     end)
 
-    -- auto-show first tab created
+    -- make first created tab visible
     if not UI.ActiveTab then
         tab.Visible = true
         UI.ActiveTab = title
@@ -305,28 +274,26 @@ function UI:CreateTab(title)
     return tab
 end
 
--- CreateSection: simple label container (full width)
+-- CreateSection
 function UI:CreateSection(opts)
     opts = opts or {}
     local parent = opts.parent or error("CreateSection requires parent")
     local frame = Instance.new("Frame", parent)
     frame.Size = UDim2.new(1, 0, 0, 28)
     frame.BackgroundTransparency = 1
-
     local label = Instance.new("TextLabel", frame)
-    label.Size = UDim2.new(1, -6, 1, 0)
-    label.Position = UDim2.new(0, 6, 0, 0)
+    label.Size = UDim2.new(1, -8, 1, 0)
+    label.Position = UDim2.new(0, 8, 0, 0)
     label.BackgroundTransparency = 1
     label.Text = tostring(opts.text or "Section")
     label.TextColor3 = Color3.new(1,1,1)
     label.Font = Enum.Font.SourceSansBold
-    label.TextSize = 16
+    label.TextSize = 15
     label.TextXAlignment = Enum.TextXAlignment.Left
-
     return frame
 end
 
--- CreateToggle: full-width toggle that calls callback(state)
+-- CreateToggle (returns container)
 function UI:CreateToggle(opts)
     opts = opts or {}
     local parent = opts.parent or error("CreateToggle requires parent")
@@ -336,16 +303,16 @@ function UI:CreateToggle(opts)
 
     local label = Instance.new("TextLabel", container)
     label.Size = UDim2.new(0.7, -8, 1, 0)
-    label.Position = UDim2.new(0, 6, 0, 0)
+    label.Position = UDim2.new(0, 8, 0, 0)
     label.BackgroundTransparency = 1
     label.Text = tostring(opts.text or "Toggle")
     label.TextColor3 = Color3.new(1,1,1)
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Font = Enum.Font.SourceSans
-    label.TextSize = 16
+    label.TextSize = 15
 
     local btn = Instance.new("TextButton", container)
-    btn.Size = UDim2.new(0.28, -8, 0, 24)
+    btn.Size = UDim2.new(0.28, -12, 0, 24)
     btn.Position = UDim2.new(0.72, 6, 0, 3)
     btn.BackgroundColor3 = Color3.fromRGB(70,70,70)
     btn.BorderSizePixel = 0
@@ -355,20 +322,16 @@ function UI:CreateToggle(opts)
 
     local state = opts.default and true or false
     btn.Text = (state and "ON" or "OFF")
-
     btn.MouseButton1Click:Connect(function()
         state = not state
         btn.Text = (state and "ON" or "OFF")
-        if type(opts.callback) == "function" then
-            pcall(opts.callback, state)
-        end
+        if type(opts.callback) == "function" then pcall(opts.callback, state) end
     end)
 
     return container
 end
 
--- CreateSlider: clicking cycles value by +1, wraps at max. calls callback(value)
--- (keeps implementation simple and robust)
+-- Real draggable slider (returns container)
 function UI:CreateSlider(opts)
     opts = opts or {}
     local parent = opts.parent or error("CreateSlider requires parent")
@@ -377,43 +340,77 @@ function UI:CreateSlider(opts)
     local value = tonumber(opts.default) or min
 
     local container = Instance.new("Frame", parent)
-    container.Size = UDim2.new(1, 0, 0, 30)
+    container.Size = UDim2.new(1, 0, 0, 40)
     container.BackgroundTransparency = 1
 
     local label = Instance.new("TextLabel", container)
-    label.Size = UDim2.new(0.6, -8, 1, 0)
-    label.Position = UDim2.new(0, 6, 0, 0)
+    label.Size = UDim2.new(1, -8, 0, 16)
+    label.Position = UDim2.new(0, 8, 0, 0)
     label.BackgroundTransparency = 1
-    label.Text = tostring(opts.text or "Slider") .. ": " .. tostring(value)
+    label.Text = tostring(opts.text or "Slider") .. " (" .. tostring(value) .. ")"
     label.TextColor3 = Color3.new(1,1,1)
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Font = Enum.Font.SourceSans
-    label.TextSize = 16
+    label.TextSize = 14
 
-    local btn = Instance.new("TextButton", container)
-    btn.Size = UDim2.new(0.38, -8, 0, 24)
-    btn.Position = UDim2.new(0.62, 6, 0, 3)
-    btn.BackgroundColor3 = Color3.fromRGB(80,80,80)
-    btn.BorderSizePixel = 0
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.Font = Enum.Font.SourceSans
-    btn.TextSize = 14
-    btn.Text = tostring(value)
+    local bar = Instance.new("Frame", container)
+    bar.Size = UDim2.new(1, -16, 0, 10)
+    bar.Position = UDim2.new(0, 8, 0, 24)
+    bar.BackgroundColor3 = Color3.fromRGB(80,80,80)
+    bar.BorderSizePixel = 0
 
-    btn.MouseButton1Click:Connect(function()
-        value = value + 1
-        if value > max then value = min end
-        label.Text = tostring(opts.text or "Slider") .. ": " .. tostring(value)
-        btn.Text = tostring(value)
-        if type(opts.callback) == "function" then
-            pcall(opts.callback, value)
+    local fill = Instance.new("Frame", bar)
+    fill.Size = UDim2.new(0, 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+    fill.BorderSizePixel = 0
+
+    -- ensure bar.AbsoluteSize available before computing ratio
+    local function setFillFromValue()
+        local range = max - min
+        local ratio = 0
+        if range > 0 then ratio = (value - min) / range end
+        fill.Size = UDim2.new(ratio, 0, 1, 0)
+        label.Text = tostring(opts.text or "Slider") .. " (" .. tostring(value) .. ")"
+        if type(opts.callback) == "function" then pcall(opts.callback, value) end
+    end
+
+    -- initial update after first render so AbsoluteSize is valid
+    task.defer(function()
+        task.wait()
+        setFillFromValue()
+    end)
+
+    local dragging = false
+    local function updateFromMousePos(mouseX)
+        local barPos = bar.AbsolutePosition.X
+        local barW = math.max(1, bar.AbsoluteSize.X)
+        local rel = clamp((mouseX - barPos) / barW, 0, 1)
+        local newVal = min + math.floor((max - min) * rel + 0.5)
+        value = clamp(newVal, min, max)
+        setFillFromValue()
+    end
+
+    bar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            updateFromMousePos(input.Position.X)
+        end
+    end)
+    bar.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            updateFromMousePos(input.Position.X)
         end
     end)
 
     return container
 end
 
--- CreateButton: full-width-ish button
+-- CreateButton
 function UI:CreateButton(opts)
     opts = opts or {}
     local parent = opts.parent or error("CreateButton requires parent")
@@ -425,196 +422,200 @@ function UI:CreateButton(opts)
     btn.Font = Enum.Font.SourceSansBold
     btn.TextSize = 16
     btn.Text = tostring(opts.text or "Button")
-
     if type(opts.callback) == "function" then
-        btn.MouseButton1Click:Connect(function()
-            pcall(opts.callback)
-        end)
+        btn.MouseButton1Click:Connect(function() pcall(opts.callback) end)
     end
-
     return btn
 end
 
--- CreateDropdown: supports single-select (default) and multi-select (popup list)
-function UI:CreateDropdown(opts)
-    opts = opts or {}
-    local parent = opts.parent or error("CreateDropdown requires parent")
-    local options = opts.options or {}
-    local isMulti = opts.multi and true or false
+-- Dropdown with popup + multi-select support (robust)
+do
+    -- allow one open popup at a time
+    local openPopup = nil
+    local openConn = nil
 
-    -- container full width
-    local container = Instance.new("Frame", parent)
-    container.Size = UDim2.new(1, 0, 0, 30)
-    container.BackgroundTransparency = 1
+    function UI:CreateDropdown(opts)
+        opts = opts or {}
+        local parent = opts.parent or error("CreateDropdown requires parent")
+        local options = opts.options or {}
+        local multi = opts.multi and true or false
 
-    local titleLabel = Instance.new("TextLabel", container)
-    titleLabel.Size = UDim2.new(0.55, -8, 1, 0)
-    titleLabel.Position = UDim2.new(0, 6, 0, 0)
-    titleLabel.BackgroundTransparency = 1
-    titleLabel.Text = tostring(opts.text or "Select")
-    titleLabel.TextColor3 = Color3.new(1,1,1)
-    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    titleLabel.Font = Enum.Font.SourceSans
-    titleLabel.TextSize = 16
+        local container = Instance.new("Frame", parent)
+        container.Size = UDim2.new(1, 0, 0, 30)
+        container.BackgroundTransparency = 1
 
-    local mainBtn = Instance.new("TextButton", container)
-    mainBtn.Size = UDim2.new(0.45, -8, 0, 24)
-    mainBtn.Position = UDim2.new(0.55, 6, 0, 3)
-    mainBtn.BackgroundColor3 = Color3.fromRGB(70,70,70)
-    mainBtn.BorderSizePixel = 0
-    mainBtn.TextColor3 = Color3.new(1,1,1)
-    mainBtn.Font = Enum.Font.SourceSans
-    mainBtn.TextSize = 14
+        local title = Instance.new("TextLabel", container)
+        title.Size = UDim2.new(0.55, -8, 1, 0)
+        title.Position = UDim2.new(0, 8, 0, 0)
+        title.BackgroundTransparency = 1
+        title.Text = tostring(opts.text or "Select")
+        title.TextColor3 = Color3.new(1,1,1)
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.Font = Enum.Font.SourceSans
+        title.TextSize = 15
 
-    -- selected state
-    local selectedSingle = nil
-    local selectedMulti = {}
+        local mainBtn = Instance.new("TextButton", container)
+        mainBtn.Size = UDim2.new(0.45, -8, 0, 24)
+        mainBtn.Position = UDim2.new(0.55, 8, 0, 3)
+        mainBtn.BackgroundColor3 = Color3.fromRGB(70,70,70)
+        mainBtn.BorderSizePixel = 0
+        mainBtn.TextColor3 = Color3.new(1,1,1)
+        mainBtn.Font = Enum.Font.SourceSans
+        mainBtn.TextSize = 14
 
-    -- initialize defaults
-    if isMulti then
-        if type(opts.default) == "table" then
-            for _, v in ipairs(opts.default) do
-                if table.find(options, v) then
-                    table.insert(selectedMulti, v)
+        local selectedSingle = nil
+        local selectedMulti = {}
+
+        -- init selected
+        if multi then
+            if type(opts.default) == "table" then
+                for _, v in ipairs(opts.default) do
+                    if table.find(options, v) then table.insert(selectedMulti, v) end
                 end
             end
-        end
-        mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
-    else
-        if opts.default then
+            mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
+        else
             if type(opts.default) == "string" and table.find(options, opts.default) then
                 selectedSingle = opts.default
-            elseif #options > 0 then
-                selectedSingle = options[1]
+            else
+                selectedSingle = options[1] or ""
             end
-        else
-            selectedSingle = options[1]
+            mainBtn.Text = tostring(selectedSingle)
         end
-        mainBtn.Text = tostring(selectedSingle or "")
-    end
 
-    -- popup frame (created on demand)
-    local popup
-    local function createPopup()
-        if popup and popup.Parent then popup:Destroy() end
-        popup = Instance.new("Frame")
-        popup.Size = UDim2.new(0, 220, 0, math.clamp(#options * 28, 28, 300))
-        popup.Position = mainBtn.AbsolutePosition + Vector2.new(0, mainBtn.AbsoluteSize.Y + 6)
-        popup.BackgroundColor3 = Color3.fromRGB(40,40,40)
-        popup.BorderSizePixel = 0
-        popup.Parent = ScreenGui
-        popup.ClipsDescendants = true
+        local function closePopup()
+            if openPopup and openPopup.Parent then
+                pcall(function() openPopup:Destroy() end)
+            end
+            openPopup = nil
+            if openConn then
+                pcall(function() openConn:Disconnect() end)
+                openConn = nil
+            end
+        end
 
-        local ui = Instance.new("UIListLayout", popup)
-        ui.SortOrder = Enum.SortOrder.LayoutOrder
-        ui.Padding = UDim.new(0, 2)
+        local function createPopup()
+            closePopup() -- close any existing
+            -- ensure mainBtn rendered so AbsolutePosition is valid
+            if mainBtn.AbsoluteSize.X == 0 then
+                -- wait a frame (RenderStepped) until absolute size is valid
+                local rendered = false
+                for i = 1, 10 do
+                    RunService.RenderStepped:Wait()
+                    if mainBtn.AbsoluteSize.X > 0 then rendered = true; break end
+                end
+                if not rendered then -- fallback
+                    task.wait(0.05)
+                end
+            end
 
-        -- create option buttons
-        for _, opt in ipairs(options) do
-            local optBtn = Instance.new("TextButton", popup)
-            optBtn.Size = UDim2.new(1, -8, 0, 26)
-            optBtn.Position = UDim2.new(0, 4, 0, 0)
-            optBtn.Text = tostring(opt)
-            optBtn.BackgroundColor3 = Color3.fromRGB(60,60,60)
-            optBtn.TextColor3 = Color3.new(1,1,1)
-            optBtn.AutoButtonColor = true
-            optBtn.Font = Enum.Font.SourceSans
-            optBtn.TextSize = 14
+            local popup = Instance.new("Frame", ScreenGui)
+            popup.Size = UDim2.new(0, 220, 0, clamp(#options * 28, 28, 300))
+            local absPos = mainBtn.AbsolutePosition
+            local absSize = mainBtn.AbsoluteSize
+            popup.Position = UDim2.new(0, absPos.X, 0, absPos.Y + absSize.Y + 6)
+            popup.BackgroundColor3 = Color3.fromRGB(35,35,35)
+            popup.BorderSizePixel = 0
+            popup.ZIndex = 1000
 
-            optBtn.MouseButton1Click:Connect(function()
-                if isMulti then
-                    local idx = table.find(selectedMulti, opt)
-                    if idx then
-                        table.remove(selectedMulti, idx)
+            local layout = Instance.new("UIListLayout", popup)
+            layout.SortOrder = Enum.SortOrder.LayoutOrder
+            layout.Padding = UDim.new(0, 2)
+
+            for _, optVal in ipairs(options) do
+                local optBtn = Instance.new("TextButton", popup)
+                optBtn.Size = UDim2.new(1, -8, 0, 26)
+                optBtn.Position = UDim2.new(0, 4, 0, 0)
+                optBtn.BackgroundColor3 = Color3.fromRGB(55,55,55)
+                optBtn.BorderSizePixel = 0
+                optBtn.TextColor3 = Color3.new(1,1,1)
+                optBtn.Font = Enum.Font.SourceSans
+                optBtn.TextSize = 14
+                optBtn.Text = tostring(optVal)
+
+                optBtn.MouseButton1Click:Connect(function()
+                    if multi then
+                        local idx = table.find(selectedMulti, optVal)
+                        if idx then
+                            table.remove(selectedMulti, idx)
+                        else
+                            table.insert(selectedMulti, optVal)
+                        end
+                        mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
+                        if type(opts.callback) == "function" then pcall(opts.callback, selectedMulti) end
                     else
-                        table.insert(selectedMulti, opt)
+                        selectedSingle = optVal
+                        mainBtn.Text = tostring(selectedSingle)
+                        if type(opts.callback) == "function" then pcall(opts.callback, selectedSingle) end
+                        closePopup()
                     end
-                    mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
-                    if type(opts.callback) == "function" then
-                        pcall(opts.callback, selectedMulti)
+                end)
+            end
+
+            -- close when clicking outside
+            openPopup = popup
+            openConn = UIS.InputBegan:Connect(function(inp, processed)
+                if processed then return end
+                if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+                    local mouse = UIS:GetMouseLocation()
+                    local pPos = popup.AbsolutePosition
+                    local pSize = popup.AbsoluteSize
+                    local bPos = mainBtn.AbsolutePosition
+                    local bSize = mainBtn.AbsoluteSize
+                    local insidePopup = mouse.X >= pPos.X and mouse.X <= (pPos.X + pSize.X) and mouse.Y >= pPos.Y and mouse.Y <= (pPos.Y + pSize.Y)
+                    local insideBtn = mouse.X >= bPos.X and mouse.X <= (bPos.X + bSize.X) and mouse.Y >= bPos.Y and mouse.Y <= (bPos.Y + bSize.Y)
+                    if not (insidePopup or insideBtn) then
+                        closePopup()
                     end
-                else
-                    selectedSingle = opt
-                    mainBtn.Text = tostring(selectedSingle)
-                    if type(opts.callback) == "function" then
-                        pcall(opts.callback, selectedSingle)
-                    end
-                    -- close popup after single select
-                    if popup and popup.Parent then
-                        popup:Destroy()
-                        popup = nil
-                    end
+                elseif inp.UserInputType == Enum.UserInputType.Touch then
+                    -- touch: close (simpler)
+                    closePopup()
                 end
             end)
         end
 
-        -- clicking outside closes popup
-        local conn
-        conn = UserInputService.InputBegan:Connect(function(inp, gp)
-            if gp then return end
-            if popup and popup.Parent then
-                local mousePos = inp.Position
-                local abs = popup.AbsolutePosition
-                local size = popup.AbsoluteSize
-                if not (mousePos.X >= abs.X and mousePos.X <= abs.X + size.X and mousePos.Y >= abs.Y and mousePos.Y <= abs.Y + size.Y) then
-                    pcall(function() popup:Destroy() end)
-                    popup = nil
-                    conn:Disconnect()
-                end
+        mainBtn.MouseButton1Click:Connect(function()
+            if openPopup then
+                -- close open popup
+                if openPopup and openPopup.Parent then pcall(function() openPopup:Destroy() end) end
+                openPopup = nil
             else
-                conn:Disconnect()
+                createPopup()
             end
         end)
-    end
 
-    mainBtn.MouseButton1Click:Connect(function()
-        -- toggle popup
-        if popup and popup.Parent then
-            pcall(function() popup:Destroy() end)
-            popup = nil
-        else
-            createPopup()
-        end
-    end)
-
-    -- return a small helper object so callers can programmatically set/get values if needed
-    local api = {
-        get = function()
-            if isMulti then
-                return selectedMulti
-            else
-                return selectedSingle
-            end
-        end,
-        set = function(val)
-            if isMulti and type(val) == "table" then
-                selectedMulti = {}
-                for _, v in ipairs(val) do if table.find(options, v) then table.insert(selectedMulti, v) end end
-                mainBtn.Text = (#selectedMulti>0) and table.concat(selectedMulti, ", ") or "None"
-                if type(opts.callback) == "function" then pcall(opts.callback, selectedMulti) end
-            elseif (not isMulti) and type(val) == "string" then
-                if table.find(options, val) then
+        -- return API-like object to get/set values programmatically
+        local api = {
+            get = function()
+                if multi then return selectedMulti else return selectedSingle end
+            end,
+            set = function(val)
+                if multi and type(val) == "table" then
+                    selectedMulti = {}
+                    for _, v in ipairs(val) do if table.find(options, v) then table.insert(selectedMulti, v) end end
+                    mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
+                    if type(opts.callback) == "function" then pcall(opts.callback, selectedMulti) end
+                elseif (not multi) and type(val) == "string" and table.find(options, val) then
                     selectedSingle = val
-                    mainBtn.Text = selectedSingle
+                    mainBtn.Text = tostring(selectedSingle)
                     if type(opts.callback) == "function" then pcall(opts.callback, selectedSingle) end
                 end
             end
-        end
-    }
+        }
 
-    return api
+        return api
+    end
 end
 
--- CreateParagraph
+-- Paragraph and color picker helpers
 function UI:CreateParagraph(opts)
     opts = opts or {}
     local parent = opts.parent or error("CreateParagraph requires parent")
     local frame = Instance.new("Frame", parent)
     frame.Size = UDim2.new(1, 0, 0, 60)
     frame.BackgroundTransparency = 1
-
     local title = Instance.new("TextLabel", frame)
-    title.Size = UDim2.new(1, -6, 0, 18)
+    title.Size = UDim2.new(1, -12, 0, 18)
     title.Position = UDim2.new(0, 6, 0, 0)
     title.BackgroundTransparency = 1
     title.Text = tostring(opts.title or "")
@@ -622,9 +623,8 @@ function UI:CreateParagraph(opts)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 15
     title.TextXAlignment = Enum.TextXAlignment.Left
-
     local txt = Instance.new("TextLabel", frame)
-    txt.Size = UDim2.new(1, -6, 1, -20)
+    txt.Size = UDim2.new(1, -12, 1, -20)
     txt.Position = UDim2.new(0, 6, 0, 20)
     txt.BackgroundTransparency = 1
     txt.Text = tostring(opts.text or "")
@@ -633,151 +633,85 @@ function UI:CreateParagraph(opts)
     txt.TextXAlignment = Enum.TextXAlignment.Left
     txt.Font = Enum.Font.SourceSans
     txt.TextSize = 14
-
     return frame
 end
 
--- CreateColorPicker (simple random color for convenience)
 function UI:CreateColorPicker(opts)
     opts = opts or {}
     local parent = opts.parent or error("CreateColorPicker requires parent")
     local container = Instance.new("Frame", parent)
     container.Size = UDim2.new(1, 0, 0, 30)
     container.BackgroundTransparency = 1
-
     local label = Instance.new("TextLabel", container)
     label.Size = UDim2.new(0.6, -8, 1, 0)
-    label.Position = UDim2.new(0, 6, 0, 0)
+    label.Position = UDim2.new(0, 8, 0, 0)
     label.BackgroundTransparency = 1
     label.Text = tostring(opts.text or "Color")
     label.TextColor3 = Color3.new(1,1,1)
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Font = Enum.Font.SourceSans
-    label.TextSize = 16
-
+    label.TextSize = 15
     local btn = Instance.new("TextButton", container)
-    btn.Size = UDim2.new(0.38, -8, 0, 24)
-    btn.Position = UDim2.new(0.62, 6, 0, 3)
+    btn.Size = UDim2.new(0.36, -8, 0, 24)
+    btn.Position = UDim2.new(0.62, 8, 0, 3)
     btn.BackgroundColor3 = opts.default or Color3.fromRGB(255,0,0)
     btn.BorderSizePixel = 0
     btn.Text = ""
     btn.MouseButton1Click:Connect(function()
         local c = Color3.fromRGB(math.random(0,255), math.random(0,255), math.random(0,255))
         btn.BackgroundColor3 = c
-        if type(opts.callback) == "function" then
-            pcall(opts.callback, c)
-        end
+        if type(opts.callback) == "function" then pcall(opts.callback, c) end
     end)
-
     return container
 end
 
--- CreateConfigManager (basic full-feature)
+-- Config manager (simple)
 function UI:CreateConfigManager(tab)
     if not tab then return end
-    local section = UI:CreateSection({ parent = tab, text = "Config Manager" })
+    local s = UI:CreateSection({ parent = tab, text = "Config Manager" })
+    local cont = Instance.new("Frame", tab)
+    cont.Size = UDim2.new(1, 0, 0, 140)
+    cont.BackgroundTransparency = 1
 
-    local container = Instance.new("Frame", tab)
-    container.Size = UDim2.new(1, 0, 0, 140)
-    container.BackgroundTransparency = 1
-
-    local selectedLabel = Instance.new("TextLabel", container)
+    local selectedLabel = Instance.new("TextLabel", cont)
     selectedLabel.Size = UDim2.new(0.6, -8, 0, 28)
-    selectedLabel.Position = UDim2.new(0, 6, 0, 6)
+    selectedLabel.Position = UDim2.new(0, 8, 0, 6)
     selectedLabel.BackgroundTransparency = 1
     selectedLabel.Text = "Selected: Default"
     selectedLabel.TextColor3 = Color3.new(1,1,1)
-    selectedLabel.Font = Enum.Font.SourceSans
-    selectedLabel.TextSize = 15
-    selectedLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-    local function refreshConfigs()
-        -- build list of config files
-        local files = {}
-        if listfiles and isfolder and isfolder(UI.ConfigsFolder) then
-            local ok, fl = pcall(function() return listfiles(UI.ConfigsFolder) end)
-            if ok and type(fl) == "table" then
-                for _, f in ipairs(fl) do
-                    local name = f:match("([^/\\]+)%.json$")
-                    if name and name ~= "settings" and name ~= "lastConfig" then
-                        table.insert(files, name)
-                    end
-                end
-            end
-        end
-        return files
-    end
+    local saveBtn = UI:CreateButton({ parent = cont, text = "Save", callback = function()
+        local name = tostring(selectedLabel.Text):gsub("^Selected:%s*", ""):gsub("^Selected: ", ""):gsub("Selected: ","")
+        if name == "" then name = "Default" end
+        UI:SaveConfig(name)
+    end })
+    saveBtn.Position = UDim2.new(0.62, 8, 0, 6)
 
-    -- Save button
-    local saveBtn = UI:CreateButton({
-        parent = container,
-        text = "Save",
-        callback = function()
-            local name = tostring(selectedLabel.Text):gsub("^Selected:%s*", ""):gsub("^Selected: ", ""):gsub("Selected: ","")
-            if name == "" then name = "Default" end
-            UI:SaveConfig(name)
-        end
-    })
-    saveBtn.Position = UDim2.new(0.62, 6, 0, 6)
+    local loadBtn = UI:CreateButton({ parent = cont, text = "Load", callback = function()
+        local name = tostring(selectedLabel.Text):gsub("^Selected:%s*", ""):gsub("^Selected: ", ""):gsub("Selected: ","")
+        if name == "" then name = "Default" end
+        UI:LoadConfig(name)
+    end })
+    loadBtn.Position = UDim2.new(0.62, 8, 0, 42)
 
-    -- Load button
-    local loadBtn = UI:CreateButton({
-        parent = container,
-        text = "Load",
-        callback = function()
-            local name = tostring(selectedLabel.Text):gsub("^Selected:%s*", ""):gsub("^Selected: ", ""):gsub("Selected: ","")
-            if name == "" then name = "Default" end
-            UI:LoadConfig(name)
-        end
-    })
-    loadBtn.Position = UDim2.new(0.62, 6, 0, 40)
-
-    -- Delete button
-    local deleteBtn = UI:CreateButton({
-        parent = container,
-        text = "Delete",
-        callback = function()
-            local name = tostring(selectedLabel.Text):gsub("^Selected:%s*", ""):gsub("^Selected: ", ""):gsub("Selected: ","")
-            local path = UI.ConfigsFolder .. "/" .. name .. ".json"
-            if delfile and isfile and isfile(path) then
-                pcall(function() delfile(path) end)
-                UI:CreateNotify({ title = "Config", description = "Deleted " .. name })
-                selectedLabel.Text = "Selected: Default"
-            else
-                UI:CreateNotify({ title = "Config", description = "Nothing to delete" })
-            end
-        end
-    })
-    deleteBtn.Position = UDim2.new(0.62, 6, 0, 74)
-
-    -- Save As input
-    local saveAsBox = Instance.new("TextBox", container)
+    local saveAsBox = Instance.new("TextBox", cont)
     saveAsBox.Size = UDim2.new(0.6, -8, 0, 28)
-    saveAsBox.Position = UDim2.new(0, 6, 0, 40)
-    saveAsBox.Text = ""
-    saveAsBox.PlaceholderText = "Enter config name"
+    saveAsBox.Position = UDim2.new(0, 8, 0, 42)
     saveAsBox.BackgroundColor3 = Color3.fromRGB(30,30,30)
     saveAsBox.TextColor3 = Color3.new(1,1,1)
+    saveAsBox.PlaceholderText = "Enter config name"
 
-    local saveAsBtn = UI:CreateButton({
-        parent = container,
-        text = "Save As",
-        callback = function()
-            local name = tostring(saveAsBox.Text or "")
-            if name == "" then
-                UI:CreateNotify({ title = "Config", description = "Enter a name first" })
-                return
-            end
-            UI:SaveConfig(name)
-            selectedLabel.Text = "Selected: " .. name
-            saveAsBox.Text = ""
-        end
-    })
-    saveAsBtn.Position = UDim2.new(0.62, 6, 0, 108)
+    local saveAsBtn = UI:CreateButton({ parent = cont, text = "Save As", callback = function()
+        local name = tostring(saveAsBox.Text or "")
+        if name == "" then UI:CreateNotify({ title = "Config", description = "Enter a name first" }); return end
+        UI:SaveConfig(name)
+        selectedLabel.Text = "Selected: " .. name
+        saveAsBox.Text = ""
+    end })
+    saveAsBtn.Position = UDim2.new(0.62, 8, 0, 78)
 
-    -- Auto Load toggle
     local autoLoadToggle = UI:CreateToggle({
-        parent = container,
+        parent = cont,
         text = "Auto Load Last Config",
         default = UI.Settings and UI.Settings.AutoLoad,
         callback = function(state)
@@ -786,51 +720,19 @@ function UI:CreateConfigManager(tab)
             UI:CreateNotify({ title = "Config Manager", description = "Auto Load is " .. (state and "ON" or "OFF") })
         end
     })
-    autoLoadToggle.Position = UDim2.new(0, 6, 0, 74)
+    autoLoadToggle.Position = UDim2.new(0, 8, 0, 78)
 
-    -- list existing configs as clickable labels under the container
-    local files = refreshConfigs()
-    local yoff = 6
-    -- small scroll area for configs
-    local listFrame = Instance.new("Frame", container)
-    listFrame.Size = UDim2.new(0.6, -8, 0, 28)
-    listFrame.Position = UDim2.new(0, 6, 0, 108)
-    listFrame.BackgroundTransparency = 1
-
-    if #files == 0 then
-        local lbl = Instance.new("TextLabel", listFrame)
-        lbl.Size = UDim2.new(1, 0, 1, 0)
-        lbl.BackgroundTransparency = 1
-        lbl.Text = "No configs"
-        lbl.TextColor3 = Color3.new(1,1,1)
-    else
-        for i, name in ipairs(files) do
-            local btn = Instance.new("TextButton", listFrame)
-            btn.Size = UDim2.new(1, 0, 0, 20)
-            btn.Position = UDim2.new(0, 0, 0, (i-1)*22)
-            btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
-            btn.Text = name
-            btn.TextColor3 = Color3.new(1,1,1)
-            btn.Font = Enum.Font.SourceSans
-            btn.TextSize = 14
-            btn.MouseButton1Click:Connect(function()
-                selectedLabel.Text = "Selected: " .. name
-            end)
-        end
-        listFrame.Size = UDim2.new(0.6, -8, 0, math.min(#files * 22, 200))
-    end
-
-    return section
+    return s
 end
 
--- INIT: load settings and last config if set
+-- INIT: load settings and last config
 UI:LoadSettings()
 if UI.Settings and UI.Settings.AutoLoad then
     local last = loadLastConfig()
     if last then UI:LoadConfig(last) else UI:LoadConfig("Default") end
 end
 
--- ensure Default exists
+-- ensure Default config exists
 pcall(function()
     local defaultPath = UI.ConfigsFolder .. "/Default.json"
     if writefile and (not isfile or not isfile(defaultPath)) then
