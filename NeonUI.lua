@@ -1,4 +1,4 @@
--- NeonUI (Extended Minimal Version with Config Manager)
+-- NeonUI (Extended Minimal Version with Config Manager + Resize Grip)
 local Player = game:GetService("Players")
 local LocalPlayer = Player.LocalPlayer
 local HttpService = game:GetService("HttpService")
@@ -18,6 +18,7 @@ end
 -- ScreenGui
 local ScreenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
 ScreenGui.Name = "Kour6anHubUI"
+ScreenGui.ResetOnSpawn = false
 
 -- 📝 Notifications (minimal)
 function UI:CreateNotify(opts)
@@ -147,7 +148,7 @@ function UI:CreateConfigManager(tab)
     end
     refreshConfigs()
 
-    -- Save
+    -- Save button
     UI:CreateButton({
         parent = section,
         text = "Save",
@@ -158,7 +159,7 @@ function UI:CreateConfigManager(tab)
         end
     }).Position = UDim2.new(0, 220, 0, 10)
 
-    -- Load
+    -- Load button
     UI:CreateButton({
         parent = section,
         text = "Load",
@@ -168,7 +169,7 @@ function UI:CreateConfigManager(tab)
         end
     }).Position = UDim2.new(0, 220, 0, 50)
 
-    -- Delete
+    -- Delete button
     UI:CreateButton({
         parent = section,
         text = "Delete",
@@ -183,83 +184,9 @@ function UI:CreateConfigManager(tab)
             end
         end
     }).Position = UDim2.new(0, 220, 0, 90)
-
-    -- Save As
-    local newConfigBox = Instance.new("TextBox", section)
-    newConfigBox.Size = UDim2.new(0, 200, 0, 30)
-    newConfigBox.Position = UDim2.new(0, 10, 0, 200)
-    newConfigBox.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    newConfigBox.TextColor3 = Color3.new(1,1,1)
-    newConfigBox.PlaceholderText = "Enter new config name"
-
-    UI:CreateButton({
-        parent = section,
-        text = "Save As",
-        callback = function()
-            local name = newConfigBox.Text
-            if name ~= "" then
-                UI:SaveConfig(name)
-                selectedLabel.Text = "Selected: " .. name
-                newConfigBox.Text = ""
-                refreshConfigs()
-            else
-                UI:CreateNotify({title="Config", description="Enter a name first!"})
-            end
-        end
-    }).Position = UDim2.new(0, 220, 0, 200)
-
-    -- Auto Load Toggle
-    UI:CreateToggle({
-        parent = section,
-        text = "Auto Load Last Config",
-        default = UI.Settings.AutoLoad,
-        callback = function(state)
-            UI.Settings.AutoLoad = state
-            UI:SaveSettings()
-            UI:CreateNotify({
-                title="Config Manager",
-                description="Auto Load Last Config is now " .. (state and "ON" or "OFF")
-            })
-        end
-    }).Position = UDim2.new(0, 10, 0, 250)
-
-    -- Reset Settings
-    UI:CreateButton({
-        parent = section,
-        text = "Reset Settings",
-        callback = function()
-            if delfile and isfile and isfile(UI.SettingsFile) then
-                delfile(UI.SettingsFile)
-            end
-            UI.Settings = { AutoLoad = true }
-            UI:SaveSettings()
-            UI:CreateNotify({title="Config Manager", description="Settings reset to default!"})
-        end
-    }).Position = UDim2.new(0, 10, 0, 290)
-
-    -- Reset All Configs
-    UI:CreateButton({
-        parent = section,
-        text = "Reset All Configs",
-        callback = function()
-            if listfiles and isfolder and isfolder(UI.ConfigsFolder) then
-                local files = listfiles(UI.ConfigsFolder)
-                for _, f in ipairs(files) do
-                    if f:match("%.json$") and not f:match("settings%.json$") then
-                        if delfile and isfile(f) then
-                            delfile(f)
-                        end
-                    end
-                end
-                UI:CreateNotify({title="Config Manager", description="All configs deleted!"})
-                selectedLabel.Text = "Selected: Default"
-                refreshConfigs()
-            end
-        end
-    }).Position = UDim2.new(0, 10, 0, 330)
 end
 
--- 🖼️ Basic UI API (AshLibs-style)
+-- 🖼️ Basic UI API (Upgraded with Tabs + Layout)
 
 function UI:CreateMain(options)
     local main = Instance.new("Frame", ScreenGui)
@@ -269,31 +196,114 @@ function UI:CreateMain(options)
     main.BackgroundColor3 = options.Theme and options.Theme.Background or Color3.fromRGB(25,25,25)
     main.Active = true
     main.Draggable = true
+    main.ClipsDescendants = true
     UI.MainFrame = main
+
+    -- Tab bar
+    local tabBar = Instance.new("Frame", main)
+    tabBar.Size = UDim2.new(1,0,0,30)
+    tabBar.BackgroundColor3 = Color3.fromRGB(20,20,20)
+    local tabList = Instance.new("UIListLayout", tabBar)
+    tabList.FillDirection = Enum.FillDirection.Horizontal
+    tabList.SortOrder = Enum.SortOrder.LayoutOrder
+
+    -- Resize grip (bottom right corner)
+    local grip = Instance.new("UISizeGrip", main)
+    grip.Name = "ResizeGrip"
+    grip.AnchorPoint = Vector2.new(1,1)
+    grip.Position = UDim2.new(1,0,1,0)
+    grip.Size = UDim2.new(0,20,0,20)
+    grip.BackgroundTransparency = 1
+    grip.ZIndex = 10
+
+    UI.TabBar = tabBar
+    UI.CurrentTab = nil
     return UI
 end
 
 function UI:CreateTab(title, icon)
-    local tab = Instance.new("Frame", UI.MainFrame)
+    -- Tab button
+    local tabButton = Instance.new("TextButton", UI.TabBar)
+    tabButton.Size = UDim2.new(0,100,1,0)
+    tabButton.Text = title
+    tabButton.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    tabButton.TextColor3 = Color3.new(1,1,1)
+
+    -- Scrolling content frame
+    local tab = Instance.new("ScrollingFrame", UI.MainFrame)
     tab.Name = title
-    tab.Size = UDim2.new(1, -10, 1, -50)
-    tab.Position = UDim2.new(0, 5, 0, 45)
+    tab.Size = UDim2.new(1, -10, 1, -40)
+    tab.Position = UDim2.new(0, 5, 0, 35)
     tab.BackgroundTransparency = 1
-    tab.Visible = true -- minimal: all tabs visible
+    tab.Visible = false
+    tab.CanvasSize = UDim2.new(0,0,0,0)
+    tab.ScrollBarThickness = 6
+    tab.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+    -- Auto layout
+    local list = Instance.new("UIListLayout", tab)
+    list.Padding = UDim.new(0,5)
+    list.SortOrder = Enum.SortOrder.LayoutOrder
+
+    -- Show only this tab when button clicked
+    tabButton.MouseButton1Click:Connect(function()
+        for _, other in pairs(UI.Tabs) do
+            other.Visible = false
+        end
+        tab.Visible = true
+        UI.CurrentTab = tab
+    end)
+
+    -- Default first tab
+    if not UI.CurrentTab then
+        tab.Visible = true
+        UI.CurrentTab = tab
+    end
+
     UI.Tabs[title] = tab
     return tab
 end
 
 function UI:CreateSection(opts)
+    -- Section frame (wrapper)
     local section = Instance.new("Frame", opts.parent)
-    section.Size = UDim2.new(1, -10, 0, 40)
     section.BackgroundTransparency = 1
-    local label = Instance.new("TextLabel", section)
-    label.Size = UDim2.new(1,0,0,30)
-    label.Text = opts.text or "Section"
-    label.TextColor3 = Color3.new(1,1,1)
-    label.BackgroundTransparency = 1
-    return section
+    section.Size = UDim2.new(1, -10, 0, 30)
+    section.AutomaticSize = Enum.AutomaticSize.Y
+
+    -- Header button
+    local header = Instance.new("TextButton", section)
+    header.Size = UDim2.new(1,0,0,30)
+    header.BackgroundColor3 = Color3.fromRGB(35,35,35)
+    header.TextColor3 = Color3.new(1,1,1)
+    header.Text = opts.text or "Section"
+    header.Font = Enum.Font.SourceSansBold
+    header.TextSize = 18
+
+    -- Content container
+    local content = Instance.new("Frame", section)
+    content.Size = UDim2.new(1,0,0,0)
+    content.BackgroundTransparency = 1
+    content.AutomaticSize = Enum.AutomaticSize.Y
+    content.Visible = true
+
+    local layout = Instance.new("UIListLayout", content)
+    layout.Padding = UDim.new(0,5)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+    -- Expand/Collapse toggle
+    local expanded = true
+    header.MouseButton1Click:Connect(function()
+        expanded = not expanded
+        content.Visible = expanded
+        header.Text = (expanded and "▼ " or "▶ ") .. (opts.text or "Section")
+    end)
+
+    -- Default header text with arrow
+    header.Text = "▼ " .. (opts.text or "Section")
+
+    section.Content = content
+    return content -- return the content frame so UI elements go inside
 end
 
 function UI:CreateToggle(opts)
