@@ -1,4 +1,4 @@
--- NeonUI (Extended Minimal Version with Config Manager + Resize Grip)
+-- NeonUI (Extended Minimal UI Library)
 local Player = game:GetService("Players")
 local LocalPlayer = Player.LocalPlayer
 local HttpService = game:GetService("HttpService")
@@ -20,12 +20,16 @@ local ScreenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"
 ScreenGui.Name = "Kour6anHubUI"
 ScreenGui.ResetOnSpawn = false
 
--- 📝 Notifications (minimal)
+---------------------------------------------------------------------
+-- Notifications
+---------------------------------------------------------------------
 function UI:CreateNotify(opts)
     print("[NOTIFY]", opts.title, opts.description)
 end
 
--- ⚙️ Settings
+---------------------------------------------------------------------
+-- Settings
+---------------------------------------------------------------------
 function UI:LoadSettings()
     if readfile and isfile and isfile(UI.SettingsFile) then
         local data = readfile(UI.SettingsFile)
@@ -44,14 +48,14 @@ function UI:SaveSettings()
     end
 end
 
--- 📝 Save last used config
+-- Save last config
 local function saveLastConfig(name)
     if writefile then
         writefile(UI.LastConfigFile, HttpService:JSONEncode({last = name}))
     end
 end
 
--- 📖 Load last used config
+-- Load last config
 local function loadLastConfig()
     if readfile and isfile and isfile(UI.LastConfigFile) then
         local data = readfile(UI.LastConfigFile)
@@ -63,7 +67,7 @@ local function loadLastConfig()
     return nil
 end
 
--- 💾 Save Config
+-- Save Config
 function UI:SaveConfig(profileName)
     profileName = profileName or "Default"
     local path = UI.ConfigsFolder .. "/" .. profileName .. ".json"
@@ -75,7 +79,7 @@ function UI:SaveConfig(profileName)
     UI:CreateNotify({title="Config", description="Saved as " .. profileName})
 end
 
--- 📖 Load Config
+-- Load Config
 function UI:LoadConfig(profileName)
     profileName = profileName or "Default"
     local path = UI.ConfigsFolder .. "/" .. profileName .. ".json"
@@ -92,102 +96,9 @@ function UI:LoadConfig(profileName)
     end
 end
 
--- 📂 Config Manager Tab
-function UI:CreateConfigManager(tab)
-    local section = UI:CreateSection({parent = tab, text = "Config Manager"})
-
-    -- Selected label
-    local selectedLabel = Instance.new("TextLabel", section)
-    selectedLabel.Size = UDim2.new(0, 200, 0, 30)
-    selectedLabel.Position = UDim2.new(0, 10, 0, 10)
-    selectedLabel.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    selectedLabel.TextColor3 = Color3.new(1,1,1)
-    selectedLabel.Text = "Selected: Default"
-
-    -- Dropdown
-    local dropdownFrame = Instance.new("Frame", section)
-    dropdownFrame.Size = UDim2.new(0, 200, 0, 0)
-    dropdownFrame.Position = UDim2.new(0, 10, 0, 45)
-    dropdownFrame.BackgroundColor3 = Color3.fromRGB(25,25,25)
-    dropdownFrame.ClipsDescendants = true
-    local uiList = Instance.new("UIListLayout", dropdownFrame)
-
-    local dropdownOpen = false
-    selectedLabel.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dropdownOpen = not dropdownOpen
-            dropdownFrame.Size = dropdownOpen and UDim2.new(0,200,0,150) or UDim2.new(0,200,0,0)
-        end
-    end)
-
-    -- Refresh configs
-    local function refreshConfigs()
-        for _, child in ipairs(dropdownFrame:GetChildren()) do
-            if child:IsA("TextButton") then
-                child:Destroy()
-            end
-        end
-        if listfiles and isfolder and isfolder(UI.ConfigsFolder) then
-            local files = listfiles(UI.ConfigsFolder)
-            for _, f in ipairs(files) do
-                local configName = string.match(f, "([^/\\]+)%.json$")
-                if configName and configName ~= "settings" and configName ~= "lastConfig" then
-                    local btn = Instance.new("TextButton", dropdownFrame)
-                    btn.Size = UDim2.new(1,0,0,25)
-                    btn.BackgroundColor3 = Color3.fromRGB(30,30,30)
-                    btn.TextColor3 = Color3.new(1,1,1)
-                    btn.Text = configName
-                    btn.MouseButton1Click:Connect(function()
-                        selectedLabel.Text = "Selected: " .. configName
-                        dropdownOpen = false
-                        dropdownFrame.Size = UDim2.new(0,200,0,0)
-                    end)
-                end
-            end
-        end
-    end
-    refreshConfigs()
-
-    -- Save button
-    UI:CreateButton({
-        parent = section,
-        text = "Save",
-        callback = function()
-            local name = string.gsub(selectedLabel.Text,"Selected: ","")
-            UI:SaveConfig(name)
-            refreshConfigs()
-        end
-    }).Position = UDim2.new(0, 220, 0, 10)
-
-    -- Load button
-    UI:CreateButton({
-        parent = section,
-        text = "Load",
-        callback = function()
-            local name = string.gsub(selectedLabel.Text,"Selected: ","")
-            UI:LoadConfig(name)
-        end
-    }).Position = UDim2.new(0, 220, 0, 50)
-
-    -- Delete button
-    UI:CreateButton({
-        parent = section,
-        text = "Delete",
-        callback = function()
-            local name = string.gsub(selectedLabel.Text,"Selected: ","")
-            local path = UI.ConfigsFolder .. "/" .. name .. ".json"
-            if delfile and isfile(path) then
-                delfile(path)
-                UI:CreateNotify({title="Config", description="Deleted " .. name})
-                selectedLabel.Text = "Selected: Default"
-                refreshConfigs()
-            end
-        end
-    }).Position = UDim2.new(0, 220, 0, 90)
-end
-
--- 🖼️ Basic UI API (Upgraded with Tabs + Layout)
-
+---------------------------------------------------------------------
+-- CreateMain (Title bar, minimize/close, tab bar)
+---------------------------------------------------------------------
 function UI:CreateMain(options)
     local main = Instance.new("Frame", ScreenGui)
     main.Name = "MainFrame"
@@ -198,9 +109,51 @@ function UI:CreateMain(options)
     main.Draggable = true
     UI.MainFrame = main
 
+    -- Title bar
+    local titleBar = Instance.new("Frame", main)
+    titleBar.Size = UDim2.new(1,0,0,30)
+    titleBar.BackgroundColor3 = Color3.fromRGB(30,30,30)
+
+    local title = Instance.new("TextLabel", titleBar)
+    title.Size = UDim2.new(1,-60,1,0)
+    title.Position = UDim2.new(0,5,0,0)
+    title.Text = options.title or "NeonUI"
+    title.TextColor3 = Color3.new(1,1,1)
+    title.BackgroundTransparency = 1
+    title.TextXAlignment = Enum.TextXAlignment.Left
+
+    -- Close button
+    local closeBtn = Instance.new("TextButton", titleBar)
+    closeBtn.Size = UDim2.new(0,30,1,0)
+    closeBtn.Position = UDim2.new(1,-30,0,0)
+    closeBtn.Text = "X"
+    closeBtn.BackgroundColor3 = Color3.fromRGB(100,30,30)
+    closeBtn.TextColor3 = Color3.new(1,1,1)
+    closeBtn.MouseButton1Click:Connect(function()
+        main.Visible = false
+    end)
+
+    -- Minimize button
+    local minBtn = Instance.new("TextButton", titleBar)
+    minBtn.Size = UDim2.new(0,30,1,0)
+    minBtn.Position = UDim2.new(1,-60,0,0)
+    minBtn.Text = "-"
+    minBtn.BackgroundColor3 = Color3.fromRGB(60,60,60)
+    minBtn.TextColor3 = Color3.new(1,1,1)
+    local minimized = false
+    minBtn.MouseButton1Click:Connect(function()
+        minimized = not minimized
+        for _, child in ipairs(main:GetChildren()) do
+            if child ~= titleBar and child ~= minBtn and child ~= closeBtn then
+                child.Visible = not minimized
+            end
+        end
+    end)
+
     -- Tab bar
     local tabBar = Instance.new("Frame", main)
     tabBar.Size = UDim2.new(1,0,0,30)
+    tabBar.Position = UDim2.new(0,0,0,30)
     tabBar.BackgroundColor3 = Color3.fromRGB(20,20,20)
     local layout = Instance.new("UIListLayout", tabBar)
     layout.FillDirection = Enum.FillDirection.Horizontal
@@ -210,9 +163,11 @@ function UI:CreateMain(options)
     UI.CurrentTab = nil
 
     return UI
-endeturn tab
 end
 
+---------------------------------------------------------------------
+-- CreateTab (with vertical layout + scrolling)
+---------------------------------------------------------------------
 function UI:CreateTab(title, icon)
     -- Tab button
     local tabBtn = Instance.new("TextButton", UI.TabBar)
@@ -224,7 +179,7 @@ function UI:CreateTab(title, icon)
     -- Tab content
     local tab = Instance.new("ScrollingFrame", UI.MainFrame)
     tab.Name = title
-    tab.Size = UDim2.new(1,-10,1,-70) -- give space for tab bar & title
+    tab.Size = UDim2.new(1,-10,1,-70)
     tab.Position = UDim2.new(0,5,0,65)
     tab.BackgroundTransparency = 1
     tab.Visible = false
@@ -255,46 +210,16 @@ function UI:CreateTab(title, icon)
     return tab
 end
 
+---------------------------------------------------------------------
+-- Controls
+---------------------------------------------------------------------
 function UI:CreateSection(opts)
-    -- Section frame (wrapper)
-    local section = Instance.new("Frame", opts.parent)
-    section.BackgroundTransparency = 1
+    local section = Instance.new("TextLabel", opts.parent)
     section.Size = UDim2.new(1, -10, 0, 30)
-    section.AutomaticSize = Enum.AutomaticSize.Y
-
-    -- Header button
-    local header = Instance.new("TextButton", section)
-    header.Size = UDim2.new(1,0,0,30)
-    header.BackgroundColor3 = Color3.fromRGB(35,35,35)
-    header.TextColor3 = Color3.new(1,1,1)
-    header.Text = opts.text or "Section"
-    header.Font = Enum.Font.SourceSansBold
-    header.TextSize = 18
-
-    -- Content container
-    local content = Instance.new("Frame", section)
-    content.Size = UDim2.new(1,0,0,0)
-    content.BackgroundTransparency = 1
-    content.AutomaticSize = Enum.AutomaticSize.Y
-    content.Visible = true
-
-    local layout = Instance.new("UIListLayout", content)
-    layout.Padding = UDim.new(0,5)
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-
-    -- Expand/Collapse toggle
-    local expanded = true
-    header.MouseButton1Click:Connect(function()
-        expanded = not expanded
-        content.Visible = expanded
-        header.Text = (expanded and "▼ " or "▶ ") .. (opts.text or "Section")
-    end)
-
-    -- Default header text with arrow
-    header.Text = "▼ " .. (opts.text or "Section")
-
-    section.Content = content
-    return content -- return the content frame so UI elements go inside
+    section.Text = opts.text or "Section"
+    section.TextColor3 = Color3.new(1,1,1)
+    section.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    return section
 end
 
 function UI:CreateToggle(opts)
@@ -361,22 +286,13 @@ function UI:CreateDropdown(opts)
 end
 
 function UI:CreateParagraph(opts)
-    local frame = Instance.new("Frame", opts.parent)
-    frame.Size = UDim2.new(0, 250, 0, 80)
+    local frame = Instance.new("TextLabel", opts.parent)
+    frame.Size = UDim2.new(0, 250, 0, 60)
+    frame.TextWrapped = true
+    frame.TextXAlignment = Enum.TextXAlignment.Left
+    frame.Text = (opts.title or "") .. "\n" .. (opts.text or "")
+    frame.TextColor3 = Color3.new(1,1,1)
     frame.BackgroundTransparency = 1
-    local title = Instance.new("TextLabel", frame)
-    title.Size = UDim2.new(1,0,0,20)
-    title.Text = opts.title or "Paragraph"
-    title.TextColor3 = Color3.new(1,1,1)
-    title.BackgroundTransparency = 1
-    local text = Instance.new("TextLabel", frame)
-    text.Size = UDim2.new(1,0,0,60)
-    text.Position = UDim2.new(0,0,0,20)
-    text.TextWrapped = true
-    text.TextXAlignment = Enum.TextXAlignment.Left
-    text.Text = opts.text or ""
-    text.TextColor3 = Color3.new(0.9,0.9,0.9)
-    text.BackgroundTransparency = 1
     return frame
 end
 
@@ -394,7 +310,50 @@ function UI:CreateColorPicker(opts)
     return btn
 end
 
--- 🚀 INIT
+---------------------------------------------------------------------
+-- Config Manager
+---------------------------------------------------------------------
+function UI:CreateConfigManager(tab)
+    local section = UI:CreateSection({parent = tab, text = "Config Manager"})
+
+    -- Save
+    UI:CreateButton({
+        parent = tab,
+        text = "Save Current Config",
+        callback = function()
+            UI:SaveConfig("Default")
+        end
+    })
+
+    -- Load
+    UI:CreateButton({
+        parent = tab,
+        text = "Load Default Config",
+        callback = function()
+            UI:LoadConfig("Default")
+        end
+    })
+
+    -- Reset All
+    UI:CreateButton({
+        parent = tab,
+        text = "Reset All Configs",
+        callback = function()
+            if listfiles and isfolder and isfolder(UI.ConfigsFolder) then
+                for _, f in ipairs(listfiles(UI.ConfigsFolder)) do
+                    if f:match("%.json$") then
+                        if delfile and isfile(f) then delfile(f) end
+                    end
+                end
+                UI:CreateNotify({title="Config", description="All configs deleted"})
+            end
+        end
+    })
+end
+
+---------------------------------------------------------------------
+-- INIT
+---------------------------------------------------------------------
 UI:LoadSettings()
 if UI.Settings.AutoLoad then
     local last = loadLastConfig()
@@ -403,6 +362,12 @@ if UI.Settings.AutoLoad then
     else
         UI:LoadConfig("Default")
     end
+end
+
+-- Ensure Default.json exists
+local defaultPath = UI.ConfigsFolder .. "/Default.json"
+if writefile and (not isfile or not isfile(defaultPath)) then
+    writefile(defaultPath, HttpService:JSONEncode({}))
 end
 
 return UI
