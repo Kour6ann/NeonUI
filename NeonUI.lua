@@ -196,71 +196,54 @@ function UI:CreateMain(options)
     main.BackgroundColor3 = options.Theme and options.Theme.Background or Color3.fromRGB(25,25,25)
     main.Active = true
     main.Draggable = true
-    main.ClipsDescendants = true
     UI.MainFrame = main
 
     -- Tab bar
     local tabBar = Instance.new("Frame", main)
     tabBar.Size = UDim2.new(1,0,0,30)
     tabBar.BackgroundColor3 = Color3.fromRGB(20,20,20)
-    local tabList = Instance.new("UIListLayout", tabBar)
-    tabList.FillDirection = Enum.FillDirection.Horizontal
-    tabList.SortOrder = Enum.SortOrder.LayoutOrder
-
-    -- Resize grip (bottom right corner)
-    local grip = Instance.new("UISizeGrip", main)
-    grip.Name = "ResizeGrip"
-    grip.AnchorPoint = Vector2.new(1,1)
-    grip.Position = UDim2.new(1,0,1,0)
-    grip.Size = UDim2.new(0,20,0,20)
-    grip.BackgroundTransparency = 1
-    grip.ZIndex = 10
-
+    local layout = Instance.new("UIListLayout", tabBar)
+    layout.FillDirection = Enum.FillDirection.Horizontal
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0,5)
     UI.TabBar = tabBar
     UI.CurrentTab = nil
+
     return UI
 end
 
 function UI:CreateTab(title, icon)
     -- Tab button
-    local tabButton = Instance.new("TextButton", UI.TabBar)
-    tabButton.Size = UDim2.new(0,100,1,0)
-    tabButton.Text = title
-    tabButton.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    tabButton.TextColor3 = Color3.new(1,1,1)
+    local tabBtn = Instance.new("TextButton", UI.TabBar)
+    tabBtn.Size = UDim2.new(0,100,1,0)
+    tabBtn.Text = title
+    tabBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    tabBtn.TextColor3 = Color3.new(1,1,1)
 
-    -- Scrolling content frame
-    local tab = Instance.new("ScrollingFrame", UI.MainFrame)
+    -- Tab content
+    local tab = Instance.new("Frame", UI.MainFrame)
     tab.Name = title
-    tab.Size = UDim2.new(1, -10, 1, -40)
-    tab.Position = UDim2.new(0, 5, 0, 35)
+    tab.Size = UDim2.new(1,-10,1,-40)
+    tab.Position = UDim2.new(0,5,0,35)
     tab.BackgroundTransparency = 1
     tab.Visible = false
-    tab.CanvasSize = UDim2.new(0,0,0,0)
-    tab.ScrollBarThickness = 6
-    tab.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    UI.Tabs[title] = tab
 
-    -- Auto layout
-    local list = Instance.new("UIListLayout", tab)
-    list.Padding = UDim.new(0,5)
-    list.SortOrder = Enum.SortOrder.LayoutOrder
-
-    -- Show only this tab when button clicked
-    tabButton.MouseButton1Click:Connect(function()
-        for _, other in pairs(UI.Tabs) do
-            other.Visible = false
+    -- Click to switch
+    tabBtn.MouseButton1Click:Connect(function()
+        for _, t in pairs(UI.Tabs) do
+            t.Visible = false
         end
         tab.Visible = true
         UI.CurrentTab = tab
     end)
 
-    -- Default first tab
+    -- If first tab, show it by default
     if not UI.CurrentTab then
-        tab.Visible = true
         UI.CurrentTab = tab
+        tab.Visible = true
     end
 
-    UI.Tabs[title] = tab
     return tab
 end
 
