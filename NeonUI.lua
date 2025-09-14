@@ -147,24 +147,26 @@ function UI:CreateMain(options)
     layout.Padding = UDim.new(0, 5)
 
     -- Minimize logic
-    minBtn.MouseButton1Click:Connect(function()
-        if not UI.Minimized then
-            for _, child in ipairs(main:GetChildren()) do
-                if child:IsA("Frame") and child ~= titleBar then
-                    child.Visible = false
-                end
+minBtn.MouseButton1Click:Connect(function()
+    if not UI.Minimized then
+        -- Hide everything except titleBar
+        for _, child in ipairs(main:GetChildren()) do
+            if child ~= titleBar then
+                child.Visible = false
             end
-            UI.Minimized = true
-        else
-            for name, tab in pairs(UI.Tabs) do
-                tab.Visible = (UI.ActiveTab == name)
-            end
-            if UI.TabBar then
-                UI.TabBar.Visible = true
-            end
-            UI.Minimized = false
         end
-    end)
+        UI.Minimized = true
+    else
+        -- Restore: show only the active tab + tab bar
+        for name, tab in pairs(UI.Tabs) do
+            tab.Visible = (UI.ActiveTab == name)
+        end
+        if UI.TabBar then
+            UI.TabBar.Visible = true
+        end
+        UI.Minimized = false
+    end
+end)
 
     -- Close logic
     closeBtn.MouseButton1Click:Connect(function()
