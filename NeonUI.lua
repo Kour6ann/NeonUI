@@ -155,6 +155,9 @@ minBtn.MouseButton1Click:Connect(function()
                 child.Visible = false
             end
         end
+        if UI.TabBar then
+            UI.TabBar.Visible = false
+        end
         UI.Minimized = true
     else
         -- Restore: show only the active tab + tab bar
@@ -167,6 +170,7 @@ minBtn.MouseButton1Click:Connect(function()
         UI.Minimized = false
     end
 end)
+
 
     -- Close logic
     closeBtn.MouseButton1Click:Connect(function()
