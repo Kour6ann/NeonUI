@@ -137,7 +137,14 @@ function NeonUI:AddPage(name)
     end)
 
     table.insert(self.buttons, tab)
-    if #self.buttons == 1 then tab:MouseButton1Click() end
+
+    -- auto-select first page
+    if #self.buttons == 1 then
+        for _,p in pairs(self.pages) do p.Visible = false end
+        for _,b in pairs(self.buttons) do Tween(b,{BackgroundColor3=colors.toggleOff}) end
+        page.Visible = true
+        Tween(tab,{BackgroundColor3 = colors.accent})
+    end
 
     return page
 end
