@@ -133,22 +133,28 @@ function UI:CreateMain(options)
         main.Visible = false
     end)
 
-    -- Minimize button
-    local minBtn = Instance.new("TextButton", titleBar)
-    minBtn.Size = UDim2.new(0,30,1,0)
-    minBtn.Position = UDim2.new(1,-60,0,0)
-    minBtn.Text = "-"
-    minBtn.BackgroundColor3 = Color3.fromRGB(60,60,60)
-    minBtn.TextColor3 = Color3.new(1,1,1)
-    local minimized = false
-    minBtn.MouseButton1Click:Connect(function()
-        minimized = not minimized
-        for _, child in ipairs(main:GetChildren()) do
-            if child ~= titleBar and child ~= minBtn and child ~= closeBtn then
-                child.Visible = not minimized
+   -- Minimize button logic
+minBtn.MouseButton1Click:Connect(function()
+    if UI.MainFrame.Visible then
+        -- Hide everything including TabBar
+        for _, child in ipairs(UI.MainFrame:GetChildren()) do
+            if child:IsA("Frame") and child ~= titleBar then
+                child.Visible = false
             end
         end
-    end)
+        UI.Minimized = true
+    else
+        -- Restore only the active tab
+        for name, tab in pairs(UI.Tabs) do
+            tab.Visible = (UI.ActiveTab == name)
+        end
+        if UI.TabBar then
+            UI.TabBar.Visible = true
+        end
+        UI.Minimized = false
+    end
+end)
+
 
     -- Tab bar
     local tabBar = Instance.new("Frame", main)
