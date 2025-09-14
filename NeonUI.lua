@@ -120,6 +120,7 @@ function UI:CreateMain(options)
     titleLabel.TextColor3 = Color3.new(1,1,1)
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 
+    -- Minimize Button
     local minBtn = Instance.new("TextButton", titleBar)
     minBtn.Size = UDim2.new(0, 30, 1, 0)
     minBtn.Position = UDim2.new(1, -60, 0, 0)
@@ -127,6 +128,7 @@ function UI:CreateMain(options)
     minBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
     minBtn.TextColor3 = Color3.new(1,1,1)
 
+    -- Close Button
     local closeBtn = Instance.new("TextButton", titleBar)
     closeBtn.Size = UDim2.new(0, 30, 1, 0)
     closeBtn.Position = UDim2.new(1, -30, 0, 0)
