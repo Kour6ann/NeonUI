@@ -1,4 +1,4 @@
--- NeonUI (Improved with Tabs + Minimize + Config Manager)
+-- NeonUI (Extended with Config Manager + True Minimize)
 local Player = game:GetService("Players")
 local LocalPlayer = Player.LocalPlayer
 local HttpService = game:GetService("HttpService")
@@ -9,8 +9,6 @@ UI.Tabs = {}
 UI.ConfigsFolder = "Kour6anHubConfigs"
 UI.SettingsFile = UI.ConfigsFolder .. "/settings.json"
 UI.LastConfigFile = UI.ConfigsFolder .. "/lastConfig.json"
-UI.ActiveTab = nil
-UI.Minimized = false
 
 -- Ensure folder exists
 if makefolder and not isfolder(UI.ConfigsFolder) then
@@ -18,11 +16,10 @@ if makefolder and not isfolder(UI.ConfigsFolder) then
 end
 
 -- ScreenGui
-local ScreenGui = Instance.new("ScreenGui")
+local ScreenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
 ScreenGui.Name = "Kour6anHubUI"
-ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
--- 📝 Notifications (minimal)
+-- 📝 Notifications
 function UI:CreateNotify(opts)
     print("[NOTIFY]", opts.title, opts.description)
 end
@@ -46,14 +43,13 @@ function UI:SaveSettings()
     end
 end
 
--- 📝 Save last used config
+-- Save/load last config
 local function saveLastConfig(name)
     if writefile then
         writefile(UI.LastConfigFile, HttpService:JSONEncode({last = name}))
     end
 end
 
--- 📖 Load last used config
 local function loadLastConfig()
     if readfile and isfile and isfile(UI.LastConfigFile) then
         local data = readfile(UI.LastConfigFile)
@@ -65,7 +61,7 @@ local function loadLastConfig()
     return nil
 end
 
--- 💾 Save Config
+-- Save/Load Config
 function UI:SaveConfig(profileName)
     profileName = profileName or "Default"
     local path = UI.ConfigsFolder .. "/" .. profileName .. ".json"
@@ -77,7 +73,6 @@ function UI:SaveConfig(profileName)
     UI:CreateNotify({title="Config", description="Saved as " .. profileName})
 end
 
--- 📖 Load Config
 function UI:LoadConfig(profileName)
     profileName = profileName or "Default"
     local path = UI.ConfigsFolder .. "/" .. profileName .. ".json"
@@ -94,8 +89,24 @@ function UI:LoadConfig(profileName)
     end
 end
 
--- ================= UI CREATION =================
+-- 📂 Config Manager Tab
+function UI:CreateConfigManager(tab)
+    local section = UI:CreateSection({parent = tab, text = "Config Manager"})
 
+    -- Example Save button
+    UI:CreateButton({
+        parent = section,
+        text = "Save Config",
+        callback = function() UI:SaveConfig("Default") end
+    })
+    UI:CreateButton({
+        parent = section,
+        text = "Load Config",
+        callback = function() UI:LoadConfig("Default") end
+    })
+end
+
+-- 🖼️ Main Window
 function UI:CreateMain(options)
     local main = Instance.new("Frame")
     main.Name = "MainFrame"
@@ -136,7 +147,7 @@ function UI:CreateMain(options)
     closeBtn.BackgroundColor3 = Color3.fromRGB(60,40,40)
     closeBtn.TextColor3 = Color3.new(1,1,1)
 
-    -- TabBar
+    -- Tab Bar
     UI.TabBar = Instance.new("Frame", main)
     UI.TabBar.Size = UDim2.new(1, 0, 0, 30)
     UI.TabBar.Position = UDim2.new(0, 0, 0, 30)
@@ -146,33 +157,30 @@ function UI:CreateMain(options)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Padding = UDim.new(0, 5)
 
-    -- Minimize logic
-local originalSize = main.Size
-
-minBtn.MouseButton1Click:Connect(function()
-    if not UI.Minimized then
-        -- Collapse to just the title bar height
-        originalSize = main.Size
-        main.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, 30)
-        for _, child in ipairs(main:GetChildren()) do
-            if child ~= titleBar then
-                child.Visible = false
+    -- Minimize Logic (true minimize)
+    local originalSize = main.Size
+    minBtn.MouseButton1Click:Connect(function()
+        if not UI.Minimized then
+            originalSize = main.Size
+            main.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, 30)
+            for _, child in ipairs(main:GetChildren()) do
+                if child ~= titleBar then
+                    child.Visible = false
+                end
             end
+            UI.Minimized = true
+        else
+            main.Size = originalSize
+            for name, tab in pairs(UI.Tabs) do
+                tab.Visible = (UI.ActiveTab == name)
+            end
+            if UI.TabBar then
+                UI.TabBar.Visible = true
+            end
+            UI.Minimized = false
         end
-        UI.Minimized = true
-    else
-        -- Restore to original size
-        main.Size = originalSize
-        for name, tab in pairs(UI.Tabs) do
-            tab.Visible = (UI.ActiveTab == name)
-        end
-        if UI.TabBar then
-            UI.TabBar.Visible = true
-        end
-        UI.Minimized = false
-    end
-end)
-    
+    end)
+
     -- Close logic
     closeBtn.MouseButton1Click:Connect(function()
         main.Visible = false
@@ -181,20 +189,24 @@ end)
     return UI
 end
 
+-- 🖱️ Tabs
 function UI:CreateTab(title)
     local tab = Instance.new("ScrollingFrame", UI.MainFrame)
     tab.Name = title
     tab.Size = UDim2.new(1, -10, 1, -70)
     tab.Position = UDim2.new(0, 5, 0, 65)
     tab.BackgroundTransparency = 1
-    tab.ScrollBarThickness = 6
     tab.Visible = false
+    tab.CanvasSize = UDim2.new(0,0,0,0)
+    tab.ScrollBarThickness = 6
     UI.Tabs[title] = tab
 
+    -- Layout for stacking
     local layout = Instance.new("UIListLayout", tab)
     layout.Padding = UDim.new(0, 5)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
 
+    -- Tab button
     local btn = Instance.new("TextButton", UI.TabBar)
     btn.Size = UDim2.new(0, 100, 1, 0)
     btn.Text = title
@@ -209,7 +221,7 @@ function UI:CreateTab(title)
         UI.ActiveTab = title
     end)
 
-    -- First tab auto-show
+    -- Show first tab
     if not UI.ActiveTab then
         tab.Visible = true
         UI.ActiveTab = title
@@ -218,18 +230,31 @@ function UI:CreateTab(title)
     return tab
 end
 
--- ================= BASIC CONTROLS =================
-
+-- 🧩 Sections
 function UI:CreateSection(opts)
     local section = Instance.new("Frame", opts.parent)
     section.Size = UDim2.new(1, -10, 0, 40)
     section.BackgroundTransparency = 1
+
     local label = Instance.new("TextLabel", section)
     label.Size = UDim2.new(1,0,0,30)
     label.Text = opts.text or "Section"
     label.TextColor3 = Color3.new(1,1,1)
     label.BackgroundTransparency = 1
     return section
+end
+
+-- 🔘 Controls
+function UI:CreateButton(opts)
+    local btn = Instance.new("TextButton", opts.parent)
+    btn.Size = UDim2.new(0, 200, 0, 30)
+    btn.Text = opts.text
+    btn.BackgroundColor3 = Color3.fromRGB(70,70,70)
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.MouseButton1Click:Connect(function()
+        if opts.callback then opts.callback() end
+    end)
+    return btn
 end
 
 function UI:CreateToggle(opts)
@@ -243,34 +268,6 @@ function UI:CreateToggle(opts)
         state = not state
         btn.Text = opts.text .. ": " .. (state and "ON" or "OFF")
         if opts.callback then opts.callback(state) end
-    end)
-    return btn
-end
-
-function UI:CreateSlider(opts)
-    local slider = Instance.new("TextButton", opts.parent)
-    slider.Size = UDim2.new(0, 200, 0, 30)
-    local value = opts.default or opts.min
-    slider.Text = opts.text .. ": " .. tostring(value)
-    slider.BackgroundColor3 = Color3.fromRGB(80,80,80)
-    slider.TextColor3 = Color3.new(1,1,1)
-    slider.MouseButton1Click:Connect(function()
-        value = value + 1
-        if value > opts.max then value = opts.min end
-        slider.Text = opts.text .. ": " .. tostring(value)
-        if opts.callback then opts.callback(value) end
-    end)
-    return slider
-end
-
-function UI:CreateButton(opts)
-    local btn = Instance.new("TextButton", opts.parent)
-    btn.Size = UDim2.new(0, 200, 0, 30)
-    btn.Text = opts.text
-    btn.BackgroundColor3 = Color3.fromRGB(70,70,70)
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.MouseButton1Click:Connect(function()
-        if opts.callback then opts.callback() end
     end)
     return btn
 end
@@ -295,47 +292,6 @@ function UI:CreateDropdown(opts)
     return dropdown
 end
 
-function UI:CreateParagraph(opts)
-    local frame = Instance.new("Frame", opts.parent)
-    frame.Size = UDim2.new(0, 250, 0, 80)
-    frame.BackgroundTransparency = 1
-    local title = Instance.new("TextLabel", frame)
-    title.Size = UDim2.new(1,0,0,20)
-    title.Text = opts.title or "Paragraph"
-    title.TextColor3 = Color3.new(1,1,1)
-    title.BackgroundTransparency = 1
-    local text = Instance.new("TextLabel", frame)
-    text.Size = UDim2.new(1,0,0,60)
-    text.Position = UDim2.new(0,0,0,20)
-    text.TextWrapped = true
-    text.TextXAlignment = Enum.TextXAlignment.Left
-    text.Text = opts.text or ""
-    text.TextColor3 = Color3.new(0.9,0.9,0.9)
-    text.BackgroundTransparency = 1
-    return frame
-end
-
-function UI:CreateColorPicker(opts)
-    local btn = Instance.new("TextButton", opts.parent)
-    btn.Size = UDim2.new(0, 200, 0, 30)
-    btn.Text = opts.text
-    btn.BackgroundColor3 = opts.default or Color3.fromRGB(255,0,0)
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.MouseButton1Click:Connect(function()
-        local newColor = Color3.fromRGB(math.random(0,255), math.random(0,255), math.random(0,255))
-        btn.BackgroundColor3 = newColor
-        if opts.callback then opts.callback(newColor) end
-    end)
-    return btn
-end
-
--- ================= CONFIG MANAGER =================
-
-function UI:CreateConfigManager(tab)
-    UI:CreateSection({parent = tab, text = "Config Manager"})
-    -- you can reuse your earlier config manager code here
-end
-
 -- 🚀 INIT
 UI:LoadSettings()
 if UI.Settings.AutoLoad then
@@ -345,12 +301,6 @@ if UI.Settings.AutoLoad then
     else
         UI:LoadConfig("Default")
     end
-end
-
--- Ensure Default.json exists
-local defaultPath = UI.ConfigsFolder .. "/Default.json"
-if writefile and (not isfile or not isfile(defaultPath)) then
-    writefile(defaultPath, HttpService:JSONEncode({}))
 end
 
 return UI
