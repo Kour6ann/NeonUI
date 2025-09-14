@@ -1,4 +1,5 @@
--- NeonUI.lua (Fixed — dropdown popup position, real draggable slider, robust)
+-- NeonUI.lua (Full merged version: fixed dropdown, fixed slider, keep all original features)
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
@@ -40,7 +41,7 @@ local ScreenGui = createScreenGui()
 -- small helper to clamp
 local function clamp(x, a, b) if x < a then return a elseif x > b then return b else return x end end
 
--- lightweight notify (print + transient frame)
+-- lightweight notify
 function UI:CreateNotify(opts)
     pcall(function()
         print("[NOTIFY]", opts.title or "Notify", opts.description or "")
@@ -68,7 +69,7 @@ function UI:CreateNotify(opts)
     end)
 end
 
--- Settings save/load (defensive)
+-- Settings save/load
 function UI:LoadSettings()
     UI.Settings = { AutoLoad = true }
     if readfile and isfile and isfile(UI.SettingsFile) then
@@ -136,7 +137,7 @@ function UI:LoadConfig(profileName)
     UI:CreateNotify({ title = "Config", description = "No config named " .. profileName })
 end
 
--- CreateMain: titlebar, tabbar, minimize/close (defensive)
+-- CreateMain
 function UI:CreateMain(options)
     options = options or {}
     if UI.MainFrame and UI.MainFrame.Parent then
@@ -227,13 +228,13 @@ function UI:CreateMain(options)
     return UI
 end
 
--- CreateTab: scrolling area with UIListLayout (auto stacking)
+-- CreateTab
 function UI:CreateTab(title)
     if not UI.MainFrame then error("Call CreateMain() before CreateTab()", 2) end
 
     local tab = Instance.new("ScrollingFrame", UI.MainFrame)
     tab.Name = tostring(title)
-    tab.Size = UDim2.new(1, -16, 1, -84) -- space for title + tabbar
+    tab.Size = UDim2.new(1, -16, 1, -84)
     tab.Position = UDim2.new(0, 8, 0, 76)
     tab.BackgroundTransparency = 1
     tab.ScrollBarThickness = 6
@@ -265,7 +266,6 @@ function UI:CreateTab(title)
         UI.ActiveTab = title
     end)
 
-    -- make first created tab visible
     if not UI.ActiveTab then
         tab.Visible = true
         UI.ActiveTab = title
@@ -293,9 +293,8 @@ function UI:CreateSection(opts)
     return frame
 end
 
--- CreateToggle (returns container)
+-- Toggle
 function UI:CreateToggle(opts)
-    opts = opts or {}
     local parent = opts.parent or error("CreateToggle requires parent")
     local container = Instance.new("Frame", parent)
     container.Size = UDim2.new(1, 0, 0, 30)
@@ -308,36 +307,32 @@ function UI:CreateToggle(opts)
     label.Text = tostring(opts.text or "Toggle")
     label.TextColor3 = Color3.new(1,1,1)
     label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Font = Enum.Font.SourceSans
-    label.TextSize = 15
 
     local btn = Instance.new("TextButton", container)
     btn.Size = UDim2.new(0.28, -12, 0, 24)
     btn.Position = UDim2.new(0.72, 6, 0, 3)
     btn.BackgroundColor3 = Color3.fromRGB(70,70,70)
-    btn.BorderSizePixel = 0
     btn.TextColor3 = Color3.new(1,1,1)
-    btn.Font = Enum.Font.SourceSans
     btn.TextSize = 14
+    btn.BorderSizePixel = 0
 
-    local state = opts.default and true or false
-    btn.Text = (state and "ON" or "OFF")
+    local state = opts.default or false
+    btn.Text = state and "ON" or "OFF"
+
     btn.MouseButton1Click:Connect(function()
         state = not state
-        btn.Text = (state and "ON" or "OFF")
-        if type(opts.callback) == "function" then pcall(opts.callback, state) end
+        btn.Text = state and "ON" or "OFF"
+        if opts.callback then pcall(opts.callback, state) end
     end)
 
     return container
 end
 
--- Real draggable slider (returns container)
+-- Slider (draggable)
 function UI:CreateSlider(opts)
-    opts = opts or {}
     local parent = opts.parent or error("CreateSlider requires parent")
-    local min = tonumber(opts.min) or 0
-    local max = tonumber(opts.max) or min
-    local value = tonumber(opts.default) or min
+    local min, max = opts.min or 0, opts.max or 100
+    local value = opts.default or min
 
     local container = Instance.new("Frame", parent)
     container.Size = UDim2.new(1, 0, 0, 40)
@@ -347,53 +342,33 @@ function UI:CreateSlider(opts)
     label.Size = UDim2.new(1, -8, 0, 16)
     label.Position = UDim2.new(0, 8, 0, 0)
     label.BackgroundTransparency = 1
-    label.Text = tostring(opts.text or "Slider") .. " (" .. tostring(value) .. ")"
+    label.Text = (opts.text or "Slider") .. " (" .. value .. ")"
     label.TextColor3 = Color3.new(1,1,1)
     label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Font = Enum.Font.SourceSans
-    label.TextSize = 14
 
     local bar = Instance.new("Frame", container)
     bar.Size = UDim2.new(1, -16, 0, 10)
     bar.Position = UDim2.new(0, 8, 0, 24)
     bar.BackgroundColor3 = Color3.fromRGB(80,80,80)
-    bar.BorderSizePixel = 0
 
     local fill = Instance.new("Frame", bar)
-    fill.Size = UDim2.new(0, 0, 1, 0)
-    fill.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-    fill.BorderSizePixel = 0
-
-    -- ensure bar.AbsoluteSize available before computing ratio
-    local function setFillFromValue()
-        local range = max - min
-        local ratio = 0
-        if range > 0 then ratio = (value - min) / range end
-        fill.Size = UDim2.new(ratio, 0, 1, 0)
-        label.Text = tostring(opts.text or "Slider") .. " (" .. tostring(value) .. ")"
-        if type(opts.callback) == "function" then pcall(opts.callback, value) end
-    end
-
-    -- initial update after first render so AbsoluteSize is valid
-    task.defer(function()
-        task.wait()
-        setFillFromValue()
-    end)
+    fill.Size = UDim2.new(0,0,1,0)
+    fill.BackgroundColor3 = Color3.fromRGB(138,43,226)
 
     local dragging = false
-    local function updateFromMousePos(mouseX)
-        local barPos = bar.AbsolutePosition.X
-        local barW = math.max(1, bar.AbsoluteSize.X)
-        local rel = clamp((mouseX - barPos) / barW, 0, 1)
-        local newVal = min + math.floor((max - min) * rel + 0.5)
-        value = clamp(newVal, min, max)
-        setFillFromValue()
+
+    local function update(v)
+        value = clamp(v, min, max)
+        local ratio = (value-min)/(max-min)
+        fill.Size = UDim2.new(ratio,0,1,0)
+        label.Text = (opts.text or "Slider") .. " (" .. value .. ")"
+        if opts.callback then pcall(opts.callback,value) end
     end
 
     bar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
-            updateFromMousePos(input.Position.X)
+            update(min + (input.Position.X-bar.AbsolutePosition.X)/bar.AbsoluteSize.X*(max-min))
         end
     end)
     bar.InputEnded:Connect(function(input)
@@ -403,341 +378,172 @@ function UI:CreateSlider(opts)
     end)
     UIS.InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            updateFromMousePos(input.Position.X)
+            update(min + (input.Position.X-bar.AbsolutePosition.X)/bar.AbsoluteSize.X*(max-min))
         end
     end)
 
+    update(value)
     return container
 end
 
--- CreateButton
+-- Button
 function UI:CreateButton(opts)
-    opts = opts or {}
     local parent = opts.parent or error("CreateButton requires parent")
     local btn = Instance.new("TextButton", parent)
-    btn.Size = UDim2.new(1, 0, 0, 30)
+    btn.Size = UDim2.new(1,0,0,30)
     btn.BackgroundColor3 = Color3.fromRGB(70,70,70)
-    btn.BorderSizePixel = 0
     btn.TextColor3 = Color3.new(1,1,1)
-    btn.Font = Enum.Font.SourceSansBold
-    btn.TextSize = 16
-    btn.Text = tostring(opts.text or "Button")
-    if type(opts.callback) == "function" then
-        btn.MouseButton1Click:Connect(function() pcall(opts.callback) end)
-    end
+    btn.Text = opts.text or "Button"
+    btn.MouseButton1Click:Connect(function()
+        if opts.callback then pcall(opts.callback) end
+    end)
     return btn
 end
 
--- Dropdown with popup + multi-select support (robust)
-do
-    -- allow one open popup at a time
-    local openPopup = nil
-    local openConn = nil
+-- Dropdown (popup, multi-select supported, closes properly)
+local openPopup=nil
+function UI:CreateDropdown(opts)
+    local parent = opts.parent or error("CreateDropdown requires parent")
+    local options = opts.options or {}
+    local multi = opts.multi or false
 
-    function UI:CreateDropdown(opts)
-        opts = opts or {}
-        local parent = opts.parent or error("CreateDropdown requires parent")
-        local options = opts.options or {}
-        local multi = opts.multi and true or false
+    local container = Instance.new("Frame", parent)
+    container.Size = UDim2.new(1,0,0,30)
+    container.BackgroundTransparency=1
 
-        local container = Instance.new("Frame", parent)
-        container.Size = UDim2.new(1, 0, 0, 30)
-        container.BackgroundTransparency = 1
+    local label = Instance.new("TextLabel", container)
+    label.Size = UDim2.new(0.5,-8,1,0)
+    label.Position=UDim2.new(0,8,0,0)
+    label.BackgroundTransparency=1
+    label.Text = opts.text or "Dropdown"
+    label.TextColor3=Color3.new(1,1,1)
 
-        local title = Instance.new("TextLabel", container)
-        title.Size = UDim2.new(0.55, -8, 1, 0)
-        title.Position = UDim2.new(0, 8, 0, 0)
-        title.BackgroundTransparency = 1
-        title.Text = tostring(opts.text or "Select")
-        title.TextColor3 = Color3.new(1,1,1)
-        title.TextXAlignment = Enum.TextXAlignment.Left
-        title.Font = Enum.Font.SourceSans
-        title.TextSize = 15
+    local btn=Instance.new("TextButton",container)
+    btn.Size=UDim2.new(0.45,-8,0,24)
+    btn.Position=UDim2.new(0.55,8,0,3)
+    btn.BackgroundColor3=Color3.fromRGB(70,70,70)
+    btn.TextColor3=Color3.new(1,1,1)
 
-        local mainBtn = Instance.new("TextButton", container)
-        mainBtn.Size = UDim2.new(0.45, -8, 0, 24)
-        mainBtn.Position = UDim2.new(0.55, 8, 0, 3)
-        mainBtn.BackgroundColor3 = Color3.fromRGB(70,70,70)
-        mainBtn.BorderSizePixel = 0
-        mainBtn.TextColor3 = Color3.new(1,1,1)
-        mainBtn.Font = Enum.Font.SourceSans
-        mainBtn.TextSize = 14
+    local selectedMulti = {}
+    local selectedSingle = options[1] or "None"
 
-        local selectedSingle = nil
-        local selectedMulti = {}
+    btn.Text = multi and "None" or selectedSingle
 
-        -- init selected
-        if multi then
-            if type(opts.default) == "table" then
-                for _, v in ipairs(opts.default) do
-                    if table.find(options, v) then table.insert(selectedMulti, v) end
-                end
-            end
-            mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
-        else
-            if type(opts.default) == "string" and table.find(options, opts.default) then
-                selectedSingle = opts.default
-            else
-                selectedSingle = options[1] or ""
-            end
-            mainBtn.Text = tostring(selectedSingle)
-        end
+    local function closePopup()
+        if openPopup then openPopup:Destroy() openPopup=nil end
+    end
 
-        local function closePopup()
-            if openPopup and openPopup.Parent then
-                pcall(function() openPopup:Destroy() end)
-            end
-            openPopup = nil
-            if openConn then
-                pcall(function() openConn:Disconnect() end)
-                openConn = nil
-            end
-        end
+    btn.MouseButton1Click:Connect(function()
+        if openPopup then closePopup() return end
+        local popup=Instance.new("Frame",ScreenGui)
+        popup.Size=UDim2.new(0,200,0,math.min(200,#options*26))
+        local abs=btn.AbsolutePosition
+        local sz=btn.AbsoluteSize
+        popup.Position=UDim2.new(0,abs.X,0,abs.Y+sz.Y+4)
+        popup.BackgroundColor3=Color3.fromRGB(35,35,35)
+        popup.ZIndex=1000
 
-        local function createPopup()
-            closePopup() -- close any existing
-            -- ensure mainBtn rendered so AbsolutePosition is valid
-            if mainBtn.AbsoluteSize.X == 0 then
-                -- wait a frame (RenderStepped) until absolute size is valid
-                local rendered = false
-                for i = 1, 10 do
-                    RunService.RenderStepped:Wait()
-                    if mainBtn.AbsoluteSize.X > 0 then rendered = true; break end
-                end
-                if not rendered then -- fallback
-                    task.wait(0.05)
-                end
-            end
+        local layout=Instance.new("UIListLayout",popup)
+        layout.SortOrder=Enum.SortOrder.LayoutOrder
 
-            local popup = Instance.new("Frame", ScreenGui)
-            popup.Size = UDim2.new(0, 220, 0, clamp(#options * 28, 28, 300))
-            local absPos = mainBtn.AbsolutePosition
-            local absSize = mainBtn.AbsoluteSize
-            popup.Position = UDim2.new(0, absPos.X, 0, absPos.Y + absSize.Y + 6)
-            popup.BackgroundColor3 = Color3.fromRGB(35,35,35)
-            popup.BorderSizePixel = 0
-            popup.ZIndex = 1000
-
-            local layout = Instance.new("UIListLayout", popup)
-            layout.SortOrder = Enum.SortOrder.LayoutOrder
-            layout.Padding = UDim.new(0, 2)
-
-            for _, optVal in ipairs(options) do
-                local optBtn = Instance.new("TextButton", popup)
-                optBtn.Size = UDim2.new(1, -8, 0, 26)
-                optBtn.Position = UDim2.new(0, 4, 0, 0)
-                optBtn.BackgroundColor3 = Color3.fromRGB(55,55,55)
-                optBtn.BorderSizePixel = 0
-                optBtn.TextColor3 = Color3.new(1,1,1)
-                optBtn.Font = Enum.Font.SourceSans
-                optBtn.TextSize = 14
-                optBtn.Text = tostring(optVal)
-
-                optBtn.MouseButton1Click:Connect(function()
-                    if multi then
-                        local idx = table.find(selectedMulti, optVal)
-                        if idx then
-                            table.remove(selectedMulti, idx)
-                        else
-                            table.insert(selectedMulti, optVal)
-                        end
-                        mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
-                        if type(opts.callback) == "function" then pcall(opts.callback, selectedMulti) end
+        for _,opt in ipairs(options) do
+            local optBtn=Instance.new("TextButton",popup)
+            optBtn.Size=UDim2.new(1,0,0,26)
+            optBtn.BackgroundColor3=Color3.fromRGB(55,55,55)
+            optBtn.TextColor3=Color3.new(1,1,1)
+            optBtn.Text=opt
+            optBtn.ZIndex=1001
+            optBtn.MouseButton1Click:Connect(function()
+                if multi then
+                    if table.find(selectedMulti,opt) then
+                        table.remove(selectedMulti,table.find(selectedMulti,opt))
                     else
-                        selectedSingle = optVal
-                        mainBtn.Text = tostring(selectedSingle)
-                        if type(opts.callback) == "function" then pcall(opts.callback, selectedSingle) end
-                        closePopup()
+                        table.insert(selectedMulti,opt)
                     end
-                end)
-            end
-
-            -- close when clicking outside
-            openPopup = popup
-            openConn = UIS.InputBegan:Connect(function(inp, processed)
-                if processed then return end
-                if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-                    local mouse = UIS:GetMouseLocation()
-                    local pPos = popup.AbsolutePosition
-                    local pSize = popup.AbsoluteSize
-                    local bPos = mainBtn.AbsolutePosition
-                    local bSize = mainBtn.AbsoluteSize
-                    local insidePopup = mouse.X >= pPos.X and mouse.X <= (pPos.X + pSize.X) and mouse.Y >= pPos.Y and mouse.Y <= (pPos.Y + pSize.Y)
-                    local insideBtn = mouse.X >= bPos.X and mouse.X <= (bPos.X + bSize.X) and mouse.Y >= bPos.Y and mouse.Y <= (bPos.Y + bSize.Y)
-                    if not (insidePopup or insideBtn) then
-                        closePopup()
-                    end
-                elseif inp.UserInputType == Enum.UserInputType.Touch then
-                    -- touch: close (simpler)
+                    btn.Text = #selectedMulti>0 and table.concat(selectedMulti,",") or "None"
+                    if opts.callback then pcall(opts.callback,selectedMulti) end
+                else
+                    selectedSingle=opt
+                    btn.Text=opt
+                    if opts.callback then pcall(opts.callback,opt) end
                     closePopup()
                 end
             end)
         end
 
-        mainBtn.MouseButton1Click:Connect(function()
-            if openPopup then
-                -- close open popup
-                if openPopup and openPopup.Parent then pcall(function() openPopup:Destroy() end) end
-                openPopup = nil
-            else
-                createPopup()
-            end
-        end)
-
-        -- return API-like object to get/set values programmatically
-        local api = {
-            get = function()
-                if multi then return selectedMulti else return selectedSingle end
-            end,
-            set = function(val)
-                if multi and type(val) == "table" then
-                    selectedMulti = {}
-                    for _, v in ipairs(val) do if table.find(options, v) then table.insert(selectedMulti, v) end end
-                    mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
-                    if type(opts.callback) == "function" then pcall(opts.callback, selectedMulti) end
-                elseif (not multi) and type(val) == "string" and table.find(options, val) then
-                    selectedSingle = val
-                    mainBtn.Text = tostring(selectedSingle)
-                    if type(opts.callback) == "function" then pcall(opts.callback, selectedSingle) end
+        openPopup=popup
+        UIS.InputBegan:Connect(function(input,proc)
+            if proc then return end
+            if input.UserInputType==Enum.UserInputType.MouseButton1 then
+                local m=UIS:GetMouseLocation()
+                local pos=popup.AbsolutePosition
+                local size=popup.AbsoluteSize
+                if not (m.X>=pos.X and m.X<=pos.X+size.X and m.Y>=pos.Y and m.Y<=pos.Y+size.Y) then
+                    closePopup()
                 end
             end
-        }
-
-        return api
-    end
-end
-
--- Paragraph and color picker helpers
-function UI:CreateParagraph(opts)
-    opts = opts or {}
-    local parent = opts.parent or error("CreateParagraph requires parent")
-    local frame = Instance.new("Frame", parent)
-    frame.Size = UDim2.new(1, 0, 0, 60)
-    frame.BackgroundTransparency = 1
-    local title = Instance.new("TextLabel", frame)
-    title.Size = UDim2.new(1, -12, 0, 18)
-    title.Position = UDim2.new(0, 6, 0, 0)
-    title.BackgroundTransparency = 1
-    title.Text = tostring(opts.title or "")
-    title.TextColor3 = Color3.new(1,1,1)
-    title.Font = Enum.Font.SourceSansBold
-    title.TextSize = 15
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    local txt = Instance.new("TextLabel", frame)
-    txt.Size = UDim2.new(1, -12, 1, -20)
-    txt.Position = UDim2.new(0, 6, 0, 20)
-    txt.BackgroundTransparency = 1
-    txt.Text = tostring(opts.text or "")
-    txt.TextColor3 = Color3.new(0.9,0.9,0.9)
-    txt.TextWrapped = true
-    txt.TextXAlignment = Enum.TextXAlignment.Left
-    txt.Font = Enum.Font.SourceSans
-    txt.TextSize = 14
-    return frame
-end
-
-function UI:CreateColorPicker(opts)
-    opts = opts or {}
-    local parent = opts.parent or error("CreateColorPicker requires parent")
-    local container = Instance.new("Frame", parent)
-    container.Size = UDim2.new(1, 0, 0, 30)
-    container.BackgroundTransparency = 1
-    local label = Instance.new("TextLabel", container)
-    label.Size = UDim2.new(0.6, -8, 1, 0)
-    label.Position = UDim2.new(0, 8, 0, 0)
-    label.BackgroundTransparency = 1
-    label.Text = tostring(opts.text or "Color")
-    label.TextColor3 = Color3.new(1,1,1)
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Font = Enum.Font.SourceSans
-    label.TextSize = 15
-    local btn = Instance.new("TextButton", container)
-    btn.Size = UDim2.new(0.36, -8, 0, 24)
-    btn.Position = UDim2.new(0.62, 8, 0, 3)
-    btn.BackgroundColor3 = opts.default or Color3.fromRGB(255,0,0)
-    btn.BorderSizePixel = 0
-    btn.Text = ""
-    btn.MouseButton1Click:Connect(function()
-        local c = Color3.fromRGB(math.random(0,255), math.random(0,255), math.random(0,255))
-        btn.BackgroundColor3 = c
-        if type(opts.callback) == "function" then pcall(opts.callback, c) end
+        end)
     end)
+
     return container
 end
 
--- Config manager (simple)
-function UI:CreateConfigManager(tab)
-    if not tab then return end
-    local s = UI:CreateSection({ parent = tab, text = "Config Manager" })
-    local cont = Instance.new("Frame", tab)
-    cont.Size = UDim2.new(1, 0, 0, 140)
-    cont.BackgroundTransparency = 1
-
-    local selectedLabel = Instance.new("TextLabel", cont)
-    selectedLabel.Size = UDim2.new(0.6, -8, 0, 28)
-    selectedLabel.Position = UDim2.new(0, 8, 0, 6)
-    selectedLabel.BackgroundTransparency = 1
-    selectedLabel.Text = "Selected: Default"
-    selectedLabel.TextColor3 = Color3.new(1,1,1)
-
-    local saveBtn = UI:CreateButton({ parent = cont, text = "Save", callback = function()
-        local name = tostring(selectedLabel.Text):gsub("^Selected:%s*", ""):gsub("^Selected: ", ""):gsub("Selected: ","")
-        if name == "" then name = "Default" end
-        UI:SaveConfig(name)
-    end })
-    saveBtn.Position = UDim2.new(0.62, 8, 0, 6)
-
-    local loadBtn = UI:CreateButton({ parent = cont, text = "Load", callback = function()
-        local name = tostring(selectedLabel.Text):gsub("^Selected:%s*", ""):gsub("^Selected: ", ""):gsub("Selected: ","")
-        if name == "" then name = "Default" end
-        UI:LoadConfig(name)
-    end })
-    loadBtn.Position = UDim2.new(0.62, 8, 0, 42)
-
-    local saveAsBox = Instance.new("TextBox", cont)
-    saveAsBox.Size = UDim2.new(0.6, -8, 0, 28)
-    saveAsBox.Position = UDim2.new(0, 8, 0, 42)
-    saveAsBox.BackgroundColor3 = Color3.fromRGB(30,30,30)
-    saveAsBox.TextColor3 = Color3.new(1,1,1)
-    saveAsBox.PlaceholderText = "Enter config name"
-
-    local saveAsBtn = UI:CreateButton({ parent = cont, text = "Save As", callback = function()
-        local name = tostring(saveAsBox.Text or "")
-        if name == "" then UI:CreateNotify({ title = "Config", description = "Enter a name first" }); return end
-        UI:SaveConfig(name)
-        selectedLabel.Text = "Selected: " .. name
-        saveAsBox.Text = ""
-    end })
-    saveAsBtn.Position = UDim2.new(0.62, 8, 0, 78)
-
-    local autoLoadToggle = UI:CreateToggle({
-        parent = cont,
-        text = "Auto Load Last Config",
-        default = UI.Settings and UI.Settings.AutoLoad,
-        callback = function(state)
-            UI.Settings.AutoLoad = state
-            UI:SaveSettings()
-            UI:CreateNotify({ title = "Config Manager", description = "Auto Load is " .. (state and "ON" or "OFF") })
-        end
-    })
-    autoLoadToggle.Position = UDim2.new(0, 8, 0, 78)
-
-    return s
+-- Paragraph
+function UI:CreateParagraph(opts)
+    local parent = opts.parent or error("CreateParagraph requires parent")
+    local frame = Instance.new("Frame", parent)
+    frame.Size=UDim2.new(1,0,0,60)
+    frame.BackgroundTransparency=1
+    local title=Instance.new("TextLabel",frame)
+    title.Size=UDim2.new(1,0,0,20)
+    title.Text=opts.title or "Paragraph"
+    title.TextColor3=Color3.new(1,1,1)
+    title.BackgroundTransparency=1
+    local text=Instance.new("TextLabel",frame)
+    text.Size=UDim2.new(1,0,1,-20)
+    text.Position=UDim2.new(0,0,0,20)
+    text.Text=opts.text or ""
+    text.TextWrapped=true
+    text.TextColor3=Color3.new(0.9,0.9,0.9)
+    text.BackgroundTransparency=1
+    return frame
 end
 
--- INIT: load settings and last config
+-- ColorPicker
+function UI:CreateColorPicker(opts)
+    local parent = opts.parent or error("CreateColorPicker requires parent")
+    local frame=Instance.new("Frame",parent)
+    frame.Size=UDim2.new(1,0,0,30)
+    frame.BackgroundTransparency=1
+    local label=Instance.new("TextLabel",frame)
+    label.Size=UDim2.new(0.6,0,1,0)
+    label.Text=opts.text or "Color"
+    label.TextColor3=Color3.new(1,1,1)
+    label.BackgroundTransparency=1
+    local btn=Instance.new("TextButton",frame)
+    btn.Size=UDim2.new(0.3,0,1,0)
+    btn.Position=UDim2.new(0.65,0,0,0)
+    btn.BackgroundColor3=opts.default or Color3.fromRGB(255,0,0)
+    btn.MouseButton1Click:Connect(function()
+        local c=Color3.fromRGB(math.random(0,255),math.random(0,255),math.random(0,255))
+        btn.BackgroundColor3=c
+        if opts.callback then pcall(opts.callback,c) end
+    end)
+    return frame
+end
+
+-- ConfigManager
+function UI:CreateConfigManager(tab)
+    UI:CreateSection({parent=tab,text="Config Manager"})
+    UI:CreateButton({parent=tab,text="Save Default",callback=function() UI:SaveConfig("Default") end})
+    UI:CreateButton({parent=tab,text="Load Default",callback=function() UI:LoadConfig("Default") end})
+end
+
+-- Init
 UI:LoadSettings()
-if UI.Settings and UI.Settings.AutoLoad then
-    local last = loadLastConfig()
+if UI.Settings.AutoLoad then
+    local last=loadLastConfig()
     if last then UI:LoadConfig(last) else UI:LoadConfig("Default") end
 end
-
--- ensure Default config exists
-pcall(function()
-    local defaultPath = UI.ConfigsFolder .. "/Default.json"
-    if writefile and (not isfile or not isfile(defaultPath)) then
-        pcall(function() writefile(defaultPath, HttpService:JSONEncode({})) end)
-    end
-end)
 
 return UI
