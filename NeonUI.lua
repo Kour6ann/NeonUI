@@ -1,5 +1,4 @@
--- NeonUI.lua (Full merged version: fixed dropdown, fixed slider, keep all original features)
-
+-- NeonUI.lua (Final Fixed Version)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
@@ -16,19 +15,18 @@ UI.ConfigsFolder = "Kour6anHubConfigs"
 UI.SettingsFile = UI.ConfigsFolder .. "/settings.json"
 UI.LastConfigFile = UI.ConfigsFolder .. "/lastConfig.json"
 
--- ensure config folder if executor supports it
+-- ensure config folder
 if makefolder and not isfolder(UI.ConfigsFolder) then
     pcall(makefolder, UI.ConfigsFolder)
 end
 
--- create ScreenGui (replace any existing)
+-- create ScreenGui
 local function createScreenGui()
     local parent = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") or game:GetService("CoreGui")
     if not parent then parent = game:GetService("CoreGui") end
     local existing = parent:FindFirstChild("Kour6anHubUI")
-    if existing and existing:IsA("ScreenGui") then
-        pcall(function() existing:Destroy() end)
-    end
+    if existing then pcall(function() existing:Destroy() end) end
+
     local sg = Instance.new("ScreenGui")
     sg.Name = "Kour6anHubUI"
     sg.ResetOnSpawn = false
@@ -38,42 +36,21 @@ end
 
 local ScreenGui = createScreenGui()
 
--- small helper to clamp
-local function clamp(x, a, b) if x < a then return a elseif x > b then return b else return x end end
-
--- lightweight notify
-function UI:CreateNotify(opts)
-    pcall(function()
-        print("[NOTIFY]", opts.title or "Notify", opts.description or "")
-        local f = Instance.new("Frame", ScreenGui)
-        f.Size = UDim2.new(0, 320, 0, 56)
-        f.Position = UDim2.new(0.5, -160, 0.08, 0)
-        f.BackgroundColor3 = Color3.fromRGB(28,28,28)
-        f.BorderSizePixel = 0
-        local t = Instance.new("TextLabel", f)
-        t.Size = UDim2.new(1, -12, 0, 18)
-        t.Position = UDim2.new(0, 6, 0, 4)
-        t.BackgroundTransparency = 1
-        t.Text = opts.title or ""
-        t.TextColor3 = Color3.new(1,1,1)
-        t.Font = Enum.Font.SourceSansBold
-        t.TextSize = 16
-        local d = Instance.new("TextLabel", f)
-        d.Size = UDim2.new(1, -12, 0, 28)
-        d.Position = UDim2.new(0, 6, 0, 22)
-        d.BackgroundTransparency = 1
-        d.Text = opts.description or ""
-        d.TextColor3 = Color3.new(0.9,0.9,0.9)
-        d.TextWrapped = true
-        task.delay(3, function() pcall(function() f:Destroy() end) end)
-    end)
+-- simple clamp
+local function clamp(x, a, b)
+    return (x < a and a) or (x > b and b) or x
 end
 
--- Settings save/load
+-- notify
+function UI:CreateNotify(opts)
+    print("[NOTIFY]", opts.title or "Notify", opts.description or "")
+end
+
+-- settings load/save
 function UI:LoadSettings()
     UI.Settings = { AutoLoad = true }
     if readfile and isfile and isfile(UI.SettingsFile) then
-        local ok, raw = pcall(function() return readfile(UI.SettingsFile) end)
+        local ok, raw = pcall(readfile, UI.SettingsFile)
         if ok and raw then
             local ok2, dec = pcall(function() return HttpService:JSONDecode(raw) end)
             if ok2 and type(dec) == "table" then
@@ -93,13 +70,15 @@ end
 
 local function saveLastConfig(name)
     if writefile then
-        pcall(function() writefile(UI.LastConfigFile, HttpService:JSONEncode({ last = name })) end)
+        pcall(function()
+            writefile(UI.LastConfigFile, HttpService:JSONEncode({ last = name }))
+        end)
     end
 end
 
 local function loadLastConfig()
     if readfile and isfile and isfile(UI.LastConfigFile) then
-        local ok, raw = pcall(function() return readfile(UI.LastConfigFile) end)
+        local ok, raw = pcall(readfile, UI.LastConfigFile)
         if ok and raw then
             local ok2, dec = pcall(function() return HttpService:JSONDecode(raw) end)
             if ok2 and dec and dec.last then return dec.last end
@@ -123,7 +102,7 @@ function UI:LoadConfig(profileName)
     profileName = profileName or "Default"
     local path = UI.ConfigsFolder .. "/" .. profileName .. ".json"
     if readfile and isfile and isfile(path) then
-        local ok, raw = pcall(function() return readfile(path) end)
+        local ok, raw = pcall(readfile, path)
         if ok and raw then
             local ok2, dec = pcall(function() return HttpService:JSONDecode(raw) end)
             if ok2 and dec then
@@ -148,7 +127,7 @@ function UI:CreateMain(options)
     main.Name = "MainFrame"
     main.Size = UDim2.new(0, 640, 0, 420)
     main.Position = UDim2.new(0.5, -320, 0.5, -210)
-    main.BackgroundColor3 = (options.Theme and options.Theme.Background) or Color3.fromRGB(25,25,25)
+    main.BackgroundColor3 = Color3.fromRGB(25,25,25)
     main.Active = true
     main.Draggable = true
     UI.MainFrame = main
@@ -156,7 +135,6 @@ function UI:CreateMain(options)
     local titleBar = Instance.new("Frame", main)
     titleBar.Name = "TitleBar"
     titleBar.Size = UDim2.new(1, 0, 0, 36)
-    titleBar.Position = UDim2.new(0, 0, 0, 0)
     titleBar.BackgroundColor3 = Color3.fromRGB(20,20,20)
 
     local titleLabel = Instance.new("TextLabel", titleBar)
@@ -189,7 +167,7 @@ function UI:CreateMain(options)
     tabBar.Name = "TabBar"
     tabBar.Size = UDim2.new(1, 0, 0, 36)
     tabBar.Position = UDim2.new(0, 0, 0, 36)
-    tabBar.BackgroundColor3 = (options.Theme and options.Theme.NavBackground) or Color3.fromRGB(30,30,30)
+    tabBar.BackgroundColor3 = Color3.fromRGB(30,30,30)
     local layout = Instance.new("UIListLayout", tabBar)
     layout.FillDirection = Enum.FillDirection.Horizontal
     layout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -212,9 +190,7 @@ function UI:CreateMain(options)
         else
             main.Size = originalSize
             for name, tab in pairs(UI.Tabs) do
-                if tab and tab:IsA("ScrollingFrame") then
-                    tab.Visible = (UI.ActiveTab == name)
-                end
+                tab.Visible = (UI.ActiveTab == name)
             end
             if UI.TabBar then UI.TabBar.Visible = true end
             UI.Minimized = false
@@ -229,22 +205,24 @@ function UI:CreateMain(options)
 end
 
 -- CreateTab
-function UI:CreateTab(title, icon)
+function UI:CreateTab(title)
+    if not UI.MainFrame then error("Call CreateMain() first", 2) end
+
     local tab = Instance.new("ScrollingFrame", UI.MainFrame)
-    tab.Name = title
-    tab.Size = UDim2.new(1, -10, 1, -50)
-    tab.Position = UDim2.new(0, 5, 0, 45)
+    tab.Name = tostring(title)
+    tab.Size = UDim2.new(1, -16, 1, -84)
+    tab.Position = UDim2.new(0, 8, 0, 76)
     tab.BackgroundTransparency = 1
     tab.ScrollBarThickness = 6
-    tab.CanvasSize = UDim2.new(0, 0, 0, 0) -- will auto expand
+    tab.Visible = false
+    tab.CanvasSize = UDim2.new(0,0,0,0)
 
-    local uiList = Instance.new("UIListLayout", tab)
-    uiList.SortOrder = Enum.SortOrder.LayoutOrder
-    uiList.Padding = UDim.new(0, 5)
+    local list = Instance.new("UIListLayout", tab)
+    list.SortOrder = Enum.SortOrder.LayoutOrder
+    list.Padding = UDim.new(0, 6)
 
-    -- auto expand canvas as items are added
-    uiList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        tab.CanvasSize = UDim2.new(0, 0, 0, uiList.AbsoluteContentSize.Y + 20)
+    list:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        tab.CanvasSize = UDim2.new(0,0,0,list.AbsoluteContentSize.Y+20)
     end)
 
     UI.Tabs[title] = tab
@@ -252,9 +230,7 @@ function UI:CreateTab(title, icon)
     local btn = Instance.new("TextButton", UI.TabBar)
     btn.Name = "TabBtn_" .. tostring(title)
     btn.Size = UDim2.new(0, 120, 1, -10)
-    btn.Position = UDim2.new(0, 6, 0, 5)
     btn.BackgroundColor3 = Color3.fromRGB(45,45,45)
-    btn.BorderSizePixel = 0
     btn.Text = tostring(title)
     btn.TextColor3 = Color3.new(1,1,1)
     btn.Font = Enum.Font.SourceSansBold
@@ -262,7 +238,7 @@ function UI:CreateTab(title, icon)
 
     btn.MouseButton1Click:Connect(function()
         for n, t in pairs(UI.Tabs) do
-            if t and t:IsA("ScrollingFrame") then t.Visible = false end
+            t.Visible = false
         end
         tab.Visible = true
         UI.ActiveTab = title
@@ -276,23 +252,80 @@ function UI:CreateTab(title, icon)
     return tab
 end
 
--- CreateSection
-function UI:CreateSection(opts)
+-- CreateSlider (fixed draggable)
+function UI:CreateSlider(opts)
     opts = opts or {}
-    local parent = opts.parent or error("CreateSection requires parent")
-    local frame = Instance.new("Frame", parent)
-    frame.Size = UDim2.new(1, 0, 0, 28)
-    frame.BackgroundTransparency = 1
-    local label = Instance.new("TextLabel", frame)
-    label.Size = UDim2.new(1, -8, 1, 0)
+    local parent = opts.parent or error("CreateSlider requires parent")
+    local min = tonumber(opts.min) or 0
+    local max = tonumber(opts.max) or min
+    local value = tonumber(opts.default) or min
+
+    local container = Instance.new("Frame", parent)
+    container.Size = UDim2.new(1, 0, 0, 40)
+    container.BackgroundTransparency = 1
+
+    local label = Instance.new("TextLabel", container)
+    label.Size = UDim2.new(1, -8, 0, 16)
     label.Position = UDim2.new(0, 8, 0, 0)
     label.BackgroundTransparency = 1
-    label.Text = tostring(opts.text or "Section")
+    label.Text = tostring(opts.text or "Slider") .. " (" .. tostring(value) .. ")"
     label.TextColor3 = Color3.new(1,1,1)
-    label.Font = Enum.Font.SourceSansBold
-    label.TextSize = 15
     label.TextXAlignment = Enum.TextXAlignment.Left
-    return frame
+    label.Font = Enum.Font.SourceSans
+    label.TextSize = 14
+
+    local bar = Instance.new("Frame", container)
+    bar.Size = UDim2.new(1, -16, 0, 10)
+    bar.Position = UDim2.new(0, 8, 0, 24)
+    bar.BackgroundColor3 = Color3.fromRGB(80,80,80)
+    bar.BorderSizePixel = 0
+
+    local fill = Instance.new("Frame", bar)
+    fill.Size = UDim2.new(0, 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+    fill.BorderSizePixel = 0
+
+    local dragging = false
+
+    local function setFill()
+        local range = max - min
+        local ratio = (value - min) / (range > 0 and range or 1)
+        fill.Size = UDim2.new(ratio, 0, 1, 0)
+        label.Text = tostring(opts.text or "Slider") .. " (" .. tostring(value) .. ")"
+        if type(opts.callback) == "function" then
+            pcall(opts.callback, value)
+        end
+    end
+
+    local function updateFromMouse(mouseX)
+        local barPos = bar.AbsolutePosition.X
+        local barW = bar.AbsoluteSize.X
+        local rel = clamp((mouseX - barPos) / barW, 0, 1)
+        value = min + math.floor((max - min) * rel + 0.5)
+        setFill()
+    end
+
+    bar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            updateFromMouse(input.Position.X)
+        end
+    end)
+
+    bar.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+
+    UIS.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            updateFromMouse(input.Position.X)
+        end
+    end)
+
+    setFill()
+    return container
 end
 
 -- Toggle
