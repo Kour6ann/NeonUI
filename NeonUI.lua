@@ -453,21 +453,9 @@ function UI:CreateButton(opts)
     return btn
 end
 
--- Dropdown (multi-select with ✓ checkmarks)
+-- 🔽 Fully patched CreateDropdown
 do
-    local openPopup = nil
-    local openConn = nil
-
-    function UI.CloseDropdownPopup()
-        if openPopup and openPopup.Parent then
-            pcall(function() openPopup:Destroy() end)
-        end
-        openPopup = nil
-        if openConn then
-            pcall(function() openConn:Disconnect() end)
-            openConn = nil
-        end
-    end
+    local openPopup, openConn
 
     function UI:CreateDropdown(opts)
         opts = opts or {}
@@ -498,9 +486,9 @@ do
         mainBtn.Font = Enum.Font.SourceSans
         mainBtn.TextSize = 14
 
-        local selectedSingle = nil
-        local selectedMulti = {}
+        local selectedSingle, selectedMulti = nil, {}
 
+        -- Initialize defaults
         if multi then
             if type(opts.default) == "table" then
                 for _, v in ipairs(opts.default) do
@@ -512,22 +500,29 @@ do
             if type(opts.default) == "string" and table.find(options, opts.default) then
                 selectedSingle = opts.default
             else
-                selectedSingle = options[1] or ""
+                selectedSingle = options[1] or "None"
             end
             mainBtn.Text = tostring(selectedSingle)
         end
 
+        local function closePopup()
+            if openPopup and openPopup.Parent then openPopup:Destroy() end
+            openPopup = nil
+            if openConn then openConn:Disconnect() end
+            openConn = nil
+        end
+
         local function createPopup()
-            UI.CloseDropdownPopup()
+            closePopup()
 
             local popup = Instance.new("Frame", ScreenGui)
-            popup.Size = UDim2.new(0, 220, 0, clamp(#options * 28, 28, 300))
+            popup.Size = UDim2.new(0, 220, 0, math.min(#options * 28, 200))
             local absPos = mainBtn.AbsolutePosition
-            local absSize = mainBtn.AbsoluteSize
-            popup.Position = UDim2.new(0, absPos.X, 0, absPos.Y + absSize.Y + 6)
+            popup.Position = UDim2.new(0, absPos.X, 0, absPos.Y + mainBtn.AbsoluteSize.Y + 4)
             popup.BackgroundColor3 = Color3.fromRGB(35,35,35)
             popup.BorderSizePixel = 0
-            popup.ZIndex = 1000
+            popup.ZIndex = 2000
+            popup.ClipsDescendants = false
 
             local layout = Instance.new("UIListLayout", popup)
             layout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -538,33 +533,24 @@ do
                 optBtn.Size = UDim2.new(1, -8, 0, 26)
                 optBtn.Position = UDim2.new(0, 4, 0, 0)
                 optBtn.BackgroundColor3 = Color3.fromRGB(55,55,55)
-                optBtn.BorderSizePixel = 0
                 optBtn.TextColor3 = Color3.new(1,1,1)
                 optBtn.Font = Enum.Font.SourceSans
                 optBtn.TextSize = 14
-
-                if multi and table.find(selectedMulti, optVal) then
-                    optBtn.Text = "✓ " .. tostring(optVal)
-                else
-                    optBtn.Text = tostring(optVal)
-                end
+                optBtn.Text = tostring(optVal)
+                optBtn.ZIndex = 2001
+                optBtn.AutoButtonColor = true
 
                 optBtn.MouseButton1Click:Connect(function()
                     if multi then
                         local idx = table.find(selectedMulti, optVal)
-                        if idx then
-                            table.remove(selectedMulti, idx)
-                        else
-                            table.insert(selectedMulti, optVal)
-                        end
+                        if idx then table.remove(selectedMulti, idx) else table.insert(selectedMulti, optVal) end
                         mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
                         if type(opts.callback) == "function" then pcall(opts.callback, selectedMulti) end
-                        createPopup() -- refresh checkmarks
                     else
                         selectedSingle = optVal
                         mainBtn.Text = tostring(selectedSingle)
                         if type(opts.callback) == "function" then pcall(opts.callback, selectedSingle) end
-                        UI.CloseDropdownPopup()
+                        closePopup()
                     end
                 end)
             end
@@ -574,44 +560,34 @@ do
                 if processed then return end
                 if inp.UserInputType == Enum.UserInputType.MouseButton1 then
                     local mouse = UIS:GetMouseLocation()
-                    local pPos = popup.AbsolutePosition
-                    local pSize = popup.AbsoluteSize
-                    local bPos = mainBtn.AbsolutePosition
-                    local bSize = mainBtn.AbsoluteSize
+                    local pPos, pSize = popup.AbsolutePosition, popup.AbsoluteSize
+                    local bPos, bSize = mainBtn.AbsolutePosition, mainBtn.AbsoluteSize
                     local insidePopup = mouse.X >= pPos.X and mouse.X <= (pPos.X + pSize.X) and mouse.Y >= pPos.Y and mouse.Y <= (pPos.Y + pSize.Y)
                     local insideBtn = mouse.X >= bPos.X and mouse.X <= (bPos.X + bSize.X) and mouse.Y >= bPos.Y and mouse.Y <= (bPos.Y + bSize.Y)
-                    if not (insidePopup or insideBtn) then
-                        UI.CloseDropdownPopup()
-                    end
+                    if not (insidePopup or insideBtn) then closePopup() end
                 end
             end)
         end
 
         mainBtn.MouseButton1Click:Connect(function()
-            if openPopup then
-                UI.CloseDropdownPopup()
-            else
-                createPopup()
-            end
+            if openPopup then closePopup() else createPopup() end
         end)
 
-        local api = {
-            get = function() if multi then return selectedMulti else return selectedSingle end end,
+        return {
+            get = function() return multi and selectedMulti or selectedSingle end,
             set = function(val)
                 if multi and type(val) == "table" then
                     selectedMulti = {}
                     for _, v in ipairs(val) do if table.find(options, v) then table.insert(selectedMulti, v) end end
                     mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
                     if type(opts.callback) == "function" then pcall(opts.callback, selectedMulti) end
-                elseif (not multi) and type(val) == "string" and table.find(options, val) then
+                elseif not multi and type(val) == "string" and table.find(options, val) then
                     selectedSingle = val
                     mainBtn.Text = tostring(selectedSingle)
                     if type(opts.callback) == "function" then pcall(opts.callback, selectedSingle) end
                 end
             end
         }
-
-        return api
     end
 end
 
