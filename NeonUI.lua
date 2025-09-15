@@ -374,7 +374,7 @@ function UI:CreateSlider(opts)
         end
     end)
 
-    UserInputService.InputChanged:Connect(function(input)
+    UIS.InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
             update(input.Position.X)
         end
