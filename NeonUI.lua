@@ -748,4 +748,14 @@ pcall(function()
     end
 end)
 
+-- 🔑 Hotkey Toggle (RightShift)
+UIS.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        if ScreenGui then
+            ScreenGui.Enabled = not ScreenGui.Enabled
+        end
+    end
+end)
+
 return UI
