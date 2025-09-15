@@ -229,21 +229,23 @@ function UI:CreateMain(options)
 end
 
 -- CreateTab
-function UI:CreateTab(title)
-    if not UI.MainFrame then error("Call CreateMain() before CreateTab()", 2) end
-
+function UI:CreateTab(title, icon)
     local tab = Instance.new("ScrollingFrame", UI.MainFrame)
-    tab.Name = tostring(title)
-    tab.Size = UDim2.new(1, -16, 1, -84)
-    tab.Position = UDim2.new(0, 8, 0, 76)
+    tab.Name = title
+    tab.Size = UDim2.new(1, -10, 1, -50)
+    tab.Position = UDim2.new(0, 5, 0, 45)
     tab.BackgroundTransparency = 1
     tab.ScrollBarThickness = 6
-    tab.Visible = false
-    tab.CanvasSize = UDim2.new(0,0,0,0)
+    tab.CanvasSize = UDim2.new(0, 0, 0, 0) -- will auto expand
 
-    local list = Instance.new("UIListLayout", tab)
-    list.SortOrder = Enum.SortOrder.LayoutOrder
-    list.Padding = UDim.new(0, 6)
+    local uiList = Instance.new("UIListLayout", tab)
+    uiList.SortOrder = Enum.SortOrder.LayoutOrder
+    uiList.Padding = UDim.new(0, 5)
+
+    -- auto expand canvas as items are added
+    uiList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        tab.CanvasSize = UDim2.new(0, 0, 0, uiList.AbsoluteContentSize.Y + 20)
+    end)
 
     UI.Tabs[title] = tab
 
@@ -328,62 +330,57 @@ function UI:CreateToggle(opts)
     return container
 end
 
--- Slider (draggable)
 function UI:CreateSlider(opts)
-    local parent = opts.parent or error("CreateSlider requires parent")
-    local min, max = opts.min or 0, opts.max or 100
-    local value = opts.default or min
+    local frame = Instance.new("Frame", opts.parent)
+    frame.Size = UDim2.new(0, 200, 0, 30)
+    frame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 
-    local container = Instance.new("Frame", parent)
-    container.Size = UDim2.new(1, 0, 0, 40)
-    container.BackgroundTransparency = 1
-
-    local label = Instance.new("TextLabel", container)
-    label.Size = UDim2.new(1, -8, 0, 16)
-    label.Position = UDim2.new(0, 8, 0, 0)
-    label.BackgroundTransparency = 1
-    label.Text = (opts.text or "Slider") .. " (" .. value .. ")"
-    label.TextColor3 = Color3.new(1,1,1)
-    label.TextXAlignment = Enum.TextXAlignment.Left
-
-    local bar = Instance.new("Frame", container)
-    bar.Size = UDim2.new(1, -16, 0, 10)
-    bar.Position = UDim2.new(0, 8, 0, 24)
-    bar.BackgroundColor3 = Color3.fromRGB(80,80,80)
+    local bar = Instance.new("Frame", frame)
+    bar.Size = UDim2.new(1, 0, 0.5, 0)
+    bar.Position = UDim2.new(0, 0, 0.25, 0)
+    bar.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
 
     local fill = Instance.new("Frame", bar)
-    fill.Size = UDim2.new(0,0,1,0)
-    fill.BackgroundColor3 = Color3.fromRGB(138,43,226)
+    fill.Size = UDim2.new(0, 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(138, 43, 226) -- accent
+
+    local label = Instance.new("TextLabel", frame)
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.new(1, 1, 1)
+    label.Text = opts.text .. ": " .. tostring(opts.default or opts.min)
 
     local dragging = false
+    local value = opts.default or opts.min
 
-    local function update(v)
-        value = clamp(v, min, max)
-        local ratio = (value-min)/(max-min)
-        fill.Size = UDim2.new(ratio,0,1,0)
-        label.Text = (opts.text or "Slider") .. " (" .. value .. ")"
-        if opts.callback then pcall(opts.callback,value) end
+    local function update(inputX)
+        local relative = math.clamp((inputX - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+        value = math.floor(opts.min + (opts.max - opts.min) * relative)
+        fill.Size = UDim2.new(relative, 0, 1, 0)
+        label.Text = opts.text .. ": " .. tostring(value)
+        if opts.callback then opts.callback(value) end
     end
 
     bar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
-            update(min + (input.Position.X-bar.AbsolutePosition.X)/bar.AbsoluteSize.X*(max-min))
+            update(input.Position.X)
         end
     end)
+
     bar.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = false
         end
     end)
-    UIS.InputChanged:Connect(function(input)
+
+    UserInputService.InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            update(min + (input.Position.X-bar.AbsolutePosition.X)/bar.AbsoluteSize.X*(max-min))
+            update(input.Position.X)
         end
     end)
 
-    update(value)
-    return container
+    return frame
 end
 
 -- Button
