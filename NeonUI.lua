@@ -251,13 +251,13 @@ function UI:CreateMain(options)
     return UI
 end
 
--- CreateTab (with scroll auto-resize)
+-- 🔖 Fixed CreateTab (auto-closes open dropdowns when switching tabs)
 function UI:CreateTab(title)
-    if not UI.MainFrame then error("Call CreateMain() first", 2) end
+    if not UI.MainFrame then error("Call CreateMain() before CreateTab()", 2) end
 
     local tab = Instance.new("ScrollingFrame", UI.MainFrame)
     tab.Name = tostring(title)
-    tab.Size = UDim2.new(1, -16, 1, -84)
+    tab.Size = UDim2.new(1, -16, 1, -84) -- space for title + tabbar
     tab.Position = UDim2.new(0, 8, 0, 76)
     tab.BackgroundTransparency = 1
     tab.ScrollBarThickness = 6
@@ -267,10 +267,6 @@ function UI:CreateTab(title)
     local list = Instance.new("UIListLayout", tab)
     list.SortOrder = Enum.SortOrder.LayoutOrder
     list.Padding = UDim.new(0, 6)
-
-    list:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        tab.CanvasSize = UDim2.new(0, 0, 0, list.AbsoluteContentSize.Y + 12)
-    end)
 
     UI.Tabs[title] = tab
 
@@ -285,16 +281,25 @@ function UI:CreateTab(title)
     btn.Font = Enum.Font.SourceSansBold
     btn.TextSize = 16
 
+    -- 🔧 Close dropdowns when switching tab
+    local function closeAllPopups()
+        for _, child in ipairs(ScreenGui:GetChildren()) do
+            if child:IsA("Frame") and child.ZIndex == 2000 then
+                child:Destroy()
+            end
+        end
+    end
+
     btn.MouseButton1Click:Connect(function()
-        -- close dropdown when switching tab
-        if UI.CloseDropdownPopup then UI.CloseDropdownPopup() end
         for n, t in pairs(UI.Tabs) do
             if t and t:IsA("ScrollingFrame") then t.Visible = false end
         end
         tab.Visible = true
         UI.ActiveTab = title
+        closeAllPopups()
     end)
 
+    -- make first created tab visible
     if not UI.ActiveTab then
         tab.Visible = true
         UI.ActiveTab = title
