@@ -459,141 +459,156 @@ function UI:CreateButton(opts)
 end
 
 -- 🔽 Fully patched CreateDropdown
+-- Keep these at the top of your UI module (shared state)
 do
-    local openPopup, openConn
+local openPopup, openConn
 
-    function UI:CreateDropdown(opts)
-        opts = opts or {}
-        local parent = opts.parent or error("CreateDropdown requires parent")
-        local options = opts.options or {}
-        local multi = opts.multi and true or false
+function UI:CreateDropdown(opts)
+    opts = opts or {}
+    local parent = opts.parent or error("CreateDropdown requires parent")
+    local options = opts.options or {}
+    local multi = opts.multi and true or false
 
-        local container = Instance.new("Frame", parent)
-        container.Size = UDim2.new(1, 0, 0, 30)
-        container.BackgroundTransparency = 1
+    local container = Instance.new("Frame", parent)
+    container.Size = UDim2.new(1, 0, 0, 30)
+    container.BackgroundTransparency = 1
 
-        local title = Instance.new("TextLabel", container)
-        title.Size = UDim2.new(0.55, -8, 1, 0)
-        title.Position = UDim2.new(0, 8, 0, 0)
-        title.BackgroundTransparency = 1
-        title.Text = tostring(opts.text or "Select")
-        title.TextColor3 = Color3.new(1,1,1)
-        title.TextXAlignment = Enum.TextXAlignment.Left
-        title.Font = Enum.Font.SourceSans
-        title.TextSize = 15
+    local title = Instance.new("TextLabel", container)
+    title.Size = UDim2.new(0.55, -8, 1, 0)
+    title.Position = UDim2.new(0, 8, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = tostring(opts.text or "Select")
+    title.TextColor3 = Color3.new(1,1,1)
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Font = Enum.Font.SourceSans
+    title.TextSize = 15
 
-        local mainBtn = Instance.new("TextButton", container)
-        mainBtn.Size = UDim2.new(0.45, -8, 0, 24)
-        mainBtn.Position = UDim2.new(0.55, 8, 0, 3)
-        mainBtn.BackgroundColor3 = Color3.fromRGB(70,70,70)
-        mainBtn.BorderSizePixel = 0
-        mainBtn.TextColor3 = Color3.new(1,1,1)
-        mainBtn.Font = Enum.Font.SourceSans
-        mainBtn.TextSize = 14
+    local mainBtn = Instance.new("TextButton", container)
+    mainBtn.Size = UDim2.new(0.45, -8, 0, 24)
+    mainBtn.Position = UDim2.new(0.55, 8, 0, 3)
+    mainBtn.BackgroundColor3 = Color3.fromRGB(70,70,70)
+    mainBtn.BorderSizePixel = 0
+    mainBtn.TextColor3 = Color3.new(1,1,1)
+    mainBtn.Font = Enum.Font.SourceSans
+    mainBtn.TextSize = 14
 
-        local selectedSingle, selectedMulti = nil, {}
+    local selectedSingle, selectedMulti = nil, {}
 
-        -- Initialize defaults
-        if multi then
-            if type(opts.default) == "table" then
-                for _, v in ipairs(opts.default) do
-                    if table.find(options, v) then table.insert(selectedMulti, v) end
-                end
+    -- Initialize defaults
+    if multi then
+        if type(opts.default) == "table" then
+            for _, v in ipairs(opts.default) do
+                if table.find(options, v) then table.insert(selectedMulti, v) end
             end
-            mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
+        end
+        mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
+    else
+        if type(opts.default) == "string" and table.find(options, opts.default) then
+            selectedSingle = opts.default
         else
-            if type(opts.default) == "string" and table.find(options, opts.default) then
-                selectedSingle = opts.default
-            else
-                selectedSingle = options[1] or "None"
-            end
-            mainBtn.Text = tostring(selectedSingle)
+            selectedSingle = options[1] or "None"
         end
+        mainBtn.Text = tostring(selectedSingle)
+    end
 
-        local function closePopup()
-            if openPopup and openPopup.Parent then openPopup:Destroy() end
-            openPopup = nil
-            if openConn then openConn:Disconnect() end
-            openConn = nil
-        end
+    local function closePopup()
+        if openPopup and openPopup.Parent then openPopup:Destroy() end
+        openPopup = nil
+        if openConn then openConn:Disconnect() end
+        openConn = nil
+    end
 
-        local function createPopup()
-            closePopup()
+    local function createPopup()
+        closePopup() -- 🔑 close any previous popup
 
-            local popup = Instance.new("Frame", ScreenGui)
-            popup.Size = UDim2.new(0, 220, 0, math.min(#options * 28, 200))
-            local absPos = mainBtn.AbsolutePosition
-            popup.Position = UDim2.new(0, absPos.X, 0, absPos.Y + mainBtn.AbsoluteSize.Y + 4)
-            popup.BackgroundColor3 = Color3.fromRGB(35,35,35)
-            popup.BorderSizePixel = 0
-            popup.ZIndex = 2000
-            popup.ClipsDescendants = false
+        local popup = Instance.new("Frame", ScreenGui)
+        popup.Size = UDim2.new(0, 220, 0, math.min(#options * 28, 200))
+        local absPos = mainBtn.AbsolutePosition
+        popup.Position = UDim2.new(0, absPos.X, 0, absPos.Y + mainBtn.AbsoluteSize.Y + 4)
+        popup.BackgroundColor3 = Color3.fromRGB(35,35,35)
+        popup.BorderSizePixel = 0
+        popup.ZIndex = 2000
 
-            local layout = Instance.new("UIListLayout", popup)
-            layout.SortOrder = Enum.SortOrder.LayoutOrder
-            layout.Padding = UDim.new(0, 2)
+        local layout = Instance.new("UIListLayout", popup)
+        layout.SortOrder = Enum.SortOrder.LayoutOrder
+        layout.Padding = UDim.new(0, 2)
 
-            for _, optVal in ipairs(options) do
-                local optBtn = Instance.new("TextButton", popup)
-                optBtn.Size = UDim2.new(1, -8, 0, 26)
-                optBtn.Position = UDim2.new(0, 4, 0, 0)
-                optBtn.BackgroundColor3 = Color3.fromRGB(55,55,55)
-                optBtn.TextColor3 = Color3.new(1,1,1)
-                optBtn.Font = Enum.Font.SourceSans
-                optBtn.TextSize = 14
-                optBtn.Text = tostring(optVal)
-                optBtn.ZIndex = 2001
-                optBtn.AutoButtonColor = true
+        for _, optVal in ipairs(options) do
+            local optBtn = Instance.new("TextButton", popup)
+            optBtn.Size = UDim2.new(1, -8, 0, 26)
+            optBtn.Position = UDim2.new(0, 4, 0, 0)
+            optBtn.BackgroundColor3 = Color3.fromRGB(55,55,55)
+            optBtn.TextColor3 = Color3.new(1,1,1)
+            optBtn.Font = Enum.Font.SourceSans
+            optBtn.TextSize = 14
+            optBtn.Text = tostring(optVal)
+            optBtn.ZIndex = 2001
 
-                optBtn.MouseButton1Click:Connect(function()
-                    if multi then
-                        local idx = table.find(selectedMulti, optVal)
-                        if idx then table.remove(selectedMulti, idx) else table.insert(selectedMulti, optVal) end
-                        mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
-                        if type(opts.callback) == "function" then pcall(opts.callback, selectedMulti) end
+            optBtn.MouseButton1Click:Connect(function()
+                if multi then
+                    local idx = table.find(selectedMulti, optVal)
+                    if idx then
+                        table.remove(selectedMulti, idx)
                     else
-                        selectedSingle = optVal
-                        mainBtn.Text = tostring(selectedSingle)
-                        if type(opts.callback) == "function" then pcall(opts.callback, selectedSingle) end
-                        closePopup()
+                        table.insert(selectedMulti, optVal)
                     end
-                end)
-            end
-
-            openPopup = popup
-            openConn = UIS.InputBegan:Connect(function(inp, processed)
-                if processed then return end
-                if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-                    local mouse = UIS:GetMouseLocation()
-                    local pPos, pSize = popup.AbsolutePosition, popup.AbsoluteSize
-                    local bPos, bSize = mainBtn.AbsolutePosition, mainBtn.AbsoluteSize
-                    local insidePopup = mouse.X >= pPos.X and mouse.X <= (pPos.X + pSize.X) and mouse.Y >= pPos.Y and mouse.Y <= (pPos.Y + pSize.Y)
-                    local insideBtn = mouse.X >= bPos.X and mouse.X <= (bPos.X + bSize.X) and mouse.Y >= bPos.Y and mouse.Y <= (bPos.Y + bSize.Y)
-                    if not (insidePopup or insideBtn) then closePopup() end
+                    mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
+                    if type(opts.callback) == "function" then
+                        pcall(opts.callback, selectedMulti)
+                    end
+                else
+                    selectedSingle = optVal
+                    mainBtn.Text = tostring(selectedSingle)
+                    if type(opts.callback) == "function" then
+                        pcall(opts.callback, selectedSingle)
+                    end
+                    closePopup()
                 end
             end)
         end
 
-        mainBtn.MouseButton1Click:Connect(function()
-            if openPopup then closePopup() else createPopup() end
-        end)
-
-        return {
-            get = function() return multi and selectedMulti or selectedSingle end,
-            set = function(val)
-                if multi and type(val) == "table" then
-                    selectedMulti = {}
-                    for _, v in ipairs(val) do if table.find(options, v) then table.insert(selectedMulti, v) end end
-                    mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
-                    if type(opts.callback) == "function" then pcall(opts.callback, selectedMulti) end
-                elseif not multi and type(val) == "string" and table.find(options, val) then
-                    selectedSingle = val
-                    mainBtn.Text = tostring(selectedSingle)
-                    if type(opts.callback) == "function" then pcall(opts.callback, selectedSingle) end
+        -- save refs
+        openPopup = popup
+        openConn = UIS.InputBegan:Connect(function(inp, processed)
+            if processed then return end
+            if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+                local mouse = UIS:GetMouseLocation()
+                local pPos, pSize = popup.AbsolutePosition, popup.AbsoluteSize
+                local bPos, bSize = mainBtn.AbsolutePosition, mainBtn.AbsoluteSize
+                local insidePopup = mouse.X >= pPos.X and mouse.X <= (pPos.X + pSize.X) and mouse.Y >= pPos.Y and mouse.Y <= (pPos.Y + pSize.Y)
+                local insideBtn = mouse.X >= bPos.X and mouse.X <= (bPos.X + bSize.X) and mouse.Y >= bPos.Y and mouse.Y <= (bPos.Y + bSize.Y)
+                if not (insidePopup or insideBtn) then
+                    closePopup()
                 end
             end
-        }
+        end)
     end
+
+    mainBtn.MouseButton1Click:Connect(function()
+        if openPopup then closePopup() else createPopup() end
+    end)
+
+    return {
+        get = function() return multi and selectedMulti or selectedSingle end,
+        set = function(val)
+            if multi and type(val) == "table" then
+                selectedMulti = {}
+                for _, v in ipairs(val) do
+                    if table.find(options, v) then table.insert(selectedMulti, v) end
+                end
+                mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
+                if type(opts.callback) == "function" then
+                    pcall(opts.callback, selectedMulti)
+                end
+            elseif not multi and type(val) == "string" and table.find(options, val) then
+                selectedSingle = val
+                mainBtn.Text = tostring(selectedSingle)
+                if type(opts.callback) == "function" then
+                    pcall(opts.callback, selectedSingle)
+                end
+            end
+        end
+    }
 end
 
 -- CreateParagraph
