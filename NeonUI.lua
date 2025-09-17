@@ -1,5 +1,7 @@
 -- NeonUI.lua (Full Patched Version)
 -- Author: Kour6anHub
+-- Patched: dropdown attaches to tab container, auto-close on tab switch,
+--         UI cleanup system, config-manager dropdown with auto-refresh.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -16,6 +18,14 @@ UI.Minimized = false
 UI.ConfigsFolder = "Kour6anHubConfigs"
 UI.SettingsFile = UI.ConfigsFolder .. "/settings.json"
 UI.LastConfigFile = UI.ConfigsFolder .. "/lastConfig.json"
+
+-- Cleanup hooks for external features to register stops
+UI.Cleanups = {}
+function UI:OnDestroy(fn)
+    if type(fn) == "function" then
+        table.insert(self.Cleanups, fn)
+    end
+end
 
 -- ensure config folder if executor supports it
 if makefolder and not isfolder(UI.ConfigsFolder) then
@@ -44,6 +54,37 @@ local function clamp(x, a, b)
     if x < a then return a elseif x > b then return b else return x end
 end
 
+-- Track open popup globally (only one popup at a time)
+UI.OpenPopup = nil
+UI.OpenPopupConn = nil
+function UI:CloseOpenPopup()
+    if UI.OpenPopup and UI.OpenPopup.Parent then
+        pcall(function() UI.OpenPopup:Destroy() end)
+    end
+    UI.OpenPopup = nil
+    if UI.OpenPopupConn then
+        pcall(function() UI.OpenPopupConn:Disconnect() end)
+        UI.OpenPopupConn = nil
+    end
+end
+
+-- Destroy UI and run cleanups
+function UI:Destroy()
+    -- run registered cleanup callbacks
+    for _, fn in ipairs(self.Cleanups) do
+        pcall(fn)
+    end
+    self.Cleanups = {}
+    -- close any popup
+    self:CloseOpenPopup()
+    -- destroy gui
+    if ScreenGui and ScreenGui.Parent then
+        pcall(function() ScreenGui:Destroy() end)
+    end
+    -- set destroyed flag
+    self.Destroyed = true
+end
+
 -- lightweight notify
 function UI:CreateNotify(opts)
     pcall(function()
@@ -53,6 +94,7 @@ function UI:CreateNotify(opts)
         f.Position = UDim2.new(0.5, -160, 0.08, 0)
         f.BackgroundColor3 = Color3.fromRGB(28,28,28)
         f.BorderSizePixel = 0
+        f.AnchorPoint = Vector2.new(0.5, 0)
         local t = Instance.new("TextLabel", f)
         t.Size = UDim2.new(1, -12, 0, 18)
         t.Position = UDim2.new(0, 6, 0, 4)
@@ -140,6 +182,22 @@ function UI:LoadConfig(profileName)
     UI:CreateNotify({ title = "Config", description = "No config named " .. profileName })
 end
 
+-- helper: list config names from the configs folder
+local function listConfigs()
+    local out = {}
+    if listfiles and isfolder and isfolder(UI.ConfigsFolder) then
+        local files = listfiles(UI.ConfigsFolder)
+        for _, f in ipairs(files) do
+            local name = tostring(f):match("([^/\\]+)%.json$")
+            if name and name ~= "settings" and name ~= "lastConfig" then
+                table.insert(out, name)
+            end
+        end
+    end
+    table.sort(out)
+    return out
+end
+
 -- CreateMain
 function UI:CreateMain(options)
     options = options or {}
@@ -171,7 +229,7 @@ function UI:CreateMain(options)
     titleLabel.Font = Enum.Font.SourceSansBold
     titleLabel.TextSize = 18
 
-    -- drag only titlebar
+    -- drag only titlebar (prevents dragging whole UI when interacting with sliders etc.)
     local dragging, dragStart, startPos
     titleBar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -245,7 +303,8 @@ function UI:CreateMain(options)
     end)
 
     closeBtn.MouseButton1Click:Connect(function()
-        pcall(function() main:Destroy() end)
+        -- Run UI destroy which triggers registered cleanups
+        pcall(function() UI:Destroy() end)
     end)
 
     return UI
@@ -281,22 +340,14 @@ function UI:CreateTab(title)
     btn.Font = Enum.Font.SourceSansBold
     btn.TextSize = 16
 
-    -- 🔧 Close dropdowns when switching tab
-    local function closeAllPopups()
-        for _, child in ipairs(ScreenGui:GetChildren()) do
-            if child:IsA("Frame") and child.ZIndex == 2000 then
-                child:Destroy()
-            end
-        end
-    end
-
     btn.MouseButton1Click:Connect(function()
+        -- close any open popup first
+        UI:CloseOpenPopup()
         for n, t in pairs(UI.Tabs) do
             if t and t:IsA("ScrollingFrame") then t.Visible = false end
         end
         tab.Visible = true
         UI.ActiveTab = title
-        closeAllPopups()
     end)
 
     -- make first created tab visible
@@ -365,7 +416,7 @@ function UI:CreateToggle(opts)
     return container
 end
 
--- CreateSlider
+-- CreateSlider (draggable without moving UI)
 function UI:CreateSlider(opts)
     opts = opts or {}
     local parent = opts.parent or error("CreateSlider requires parent")
@@ -413,6 +464,7 @@ function UI:CreateSlider(opts)
     bar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
+            -- update once on click
             local mouse = UIS:GetMouseLocation()
             local barPos = bar.AbsolutePosition.X
             local barW = math.max(1, bar.AbsoluteSize.X)
@@ -458,11 +510,7 @@ function UI:CreateButton(opts)
     return btn
 end
 
--- 🔽 Fully patched CreateDropdown
--- Keep these at the top of your UI module (shared state)
-do
-local openPopup, openConn
-
+-- 🔽 Fully patched CreateDropdown (parents popup to same container so it scrolls with tab)
 function UI:CreateDropdown(opts)
     opts = opts or {}
     local parent = opts.parent or error("CreateDropdown requires parent")
@@ -491,6 +539,7 @@ function UI:CreateDropdown(opts)
     mainBtn.TextColor3 = Color3.new(1,1,1)
     mainBtn.Font = Enum.Font.SourceSans
     mainBtn.TextSize = 14
+    mainBtn.AutoButtonColor = true
 
     local selectedSingle, selectedMulti = nil, {}
 
@@ -511,23 +560,24 @@ function UI:CreateDropdown(opts)
         mainBtn.Text = tostring(selectedSingle)
     end
 
-    local function closePopup()
-        if openPopup and openPopup.Parent then openPopup:Destroy() end
-        openPopup = nil
-        if openConn then openConn:Disconnect() end
-        openConn = nil
-    end
-
     local function createPopup()
-        closePopup() -- 🔑 close any previous popup
+        -- close any open popup first
+        UI:CloseOpenPopup()
 
-        local popup = Instance.new("Frame", ScreenGui)
-        popup.Size = UDim2.new(0, 220, 0, math.min(#options * 28, 200))
-        local absPos = mainBtn.AbsolutePosition
-        popup.Position = UDim2.new(0, absPos.X, 0, absPos.Y + mainBtn.AbsoluteSize.Y + 4)
+        -- popup is parented to the same parent (so it scrolls with tab)
+        local popup = Instance.new("ScrollingFrame", parent)
+        popup.Size = UDim2.new(0, math.max(mainBtn.AbsoluteSize.X, 180), 0, math.min(#options * 28, 200))
+        -- position relative to container (works with scrolling frame)
+        local localX = mainBtn.Position.X.Offset
+        local localScale = mainBtn.Position.X.Scale
+        popup.Position = UDim2.new(localScale, localX, 0, mainBtn.Position.Y.Offset + mainBtn.Size.Y.Offset + 4)
         popup.BackgroundColor3 = Color3.fromRGB(35,35,35)
         popup.BorderSizePixel = 0
-        popup.ZIndex = 2000
+        popup.ScrollBarThickness = 6
+        popup.CanvasSize = UDim2.new(0, 0, 0, #options * 28)
+        popup.ZIndex = 3000
+        popup.ClipsDescendants = false
+        popup.Name = "NeonUIDropdownPopup"
 
         local layout = Instance.new("UIListLayout", popup)
         layout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -542,7 +592,8 @@ function UI:CreateDropdown(opts)
             optBtn.Font = Enum.Font.SourceSans
             optBtn.TextSize = 14
             optBtn.Text = tostring(optVal)
-            optBtn.ZIndex = 2001
+            optBtn.ZIndex = 3001
+            optBtn.AutoButtonColor = true
 
             optBtn.MouseButton1Click:Connect(function()
                 if multi then
@@ -553,39 +604,43 @@ function UI:CreateDropdown(opts)
                         table.insert(selectedMulti, optVal)
                     end
                     mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
-                    if type(opts.callback) == "function" then
-                        pcall(opts.callback, selectedMulti)
-                    end
+                    if type(opts.callback) == "function" then pcall(opts.callback, selectedMulti) end
                 else
                     selectedSingle = optVal
                     mainBtn.Text = tostring(selectedSingle)
-                    if type(opts.callback) == "function" then
-                        pcall(opts.callback, selectedSingle)
-                    end
-                    closePopup()
+                    if type(opts.callback) == "function" then pcall(opts.callback, selectedSingle) end
+                    -- close popup
+                    UI:CloseOpenPopup()
                 end
             end)
         end
 
-        -- save refs
-        openPopup = popup
-        openConn = UIS.InputBegan:Connect(function(inp, processed)
+        -- store popup globally so tabs can close it
+        UI.OpenPopup = popup
+
+        -- close when clicking outside (use global InputBegan connection)
+        UI.OpenPopupConn = UIS.InputBegan:Connect(function(inp, processed)
             if processed then return end
             if inp.UserInputType == Enum.UserInputType.MouseButton1 then
                 local mouse = UIS:GetMouseLocation()
+                -- absolute bounds of popup and mainBtn
                 local pPos, pSize = popup.AbsolutePosition, popup.AbsoluteSize
                 local bPos, bSize = mainBtn.AbsolutePosition, mainBtn.AbsoluteSize
                 local insidePopup = mouse.X >= pPos.X and mouse.X <= (pPos.X + pSize.X) and mouse.Y >= pPos.Y and mouse.Y <= (pPos.Y + pSize.Y)
                 local insideBtn = mouse.X >= bPos.X and mouse.X <= (bPos.X + bSize.X) and mouse.Y >= bPos.Y and mouse.Y <= (bPos.Y + bSize.Y)
                 if not (insidePopup or insideBtn) then
-                    closePopup()
+                    UI:CloseOpenPopup()
                 end
             end
         end)
     end
 
     mainBtn.MouseButton1Click:Connect(function()
-        if openPopup then closePopup() else createPopup() end
+        if UI.OpenPopup then
+            UI:CloseOpenPopup()
+        else
+            createPopup()
+        end
     end)
 
     return {
@@ -593,19 +648,13 @@ function UI:CreateDropdown(opts)
         set = function(val)
             if multi and type(val) == "table" then
                 selectedMulti = {}
-                for _, v in ipairs(val) do
-                    if table.find(options, v) then table.insert(selectedMulti, v) end
-                end
+                for _, v in ipairs(val) do if table.find(options, v) then table.insert(selectedMulti, v) end end
                 mainBtn.Text = (#selectedMulti > 0) and table.concat(selectedMulti, ", ") or "None"
-                if type(opts.callback) == "function" then
-                    pcall(opts.callback, selectedMulti)
-                end
+                if type(opts.callback) == "function" then pcall(opts.callback, selectedMulti) end
             elseif not multi and type(val) == "string" and table.find(options, val) then
                 selectedSingle = val
                 mainBtn.Text = tostring(selectedSingle)
-                if type(opts.callback) == "function" then
-                    pcall(opts.callback, selectedSingle)
-                end
+                if type(opts.callback) == "function" then pcall(opts.callback, selectedSingle) end
             end
         end
     }
@@ -670,12 +719,12 @@ function UI:CreateColorPicker(opts)
     return container
 end
 
--- Config manager
+-- Config manager (with dropdown listing + auto-refresh)
 function UI:CreateConfigManager(tab)
     if not tab then return end
     local s = UI:CreateSection({ parent = tab, text = "Config Manager" })
     local cont = Instance.new("Frame", tab)
-    cont.Size = UDim2.new(1, 0, 0, 140)
+    cont.Size = UDim2.new(1, 0, 0, 160)
     cont.BackgroundTransparency = 1
 
     local selectedLabel = Instance.new("TextLabel", cont)
@@ -685,23 +734,135 @@ function UI:CreateConfigManager(tab)
     selectedLabel.Text = "Selected: Default"
     selectedLabel.TextColor3 = Color3.new(1,1,1)
 
+    -- dropdown for configs
+    local configNames = listConfigs()
+    local configDropdownAPI = UI:CreateDropdown({
+        parent = cont,
+        text = "Configs",
+        options = configNames,
+        default = (configNames[1] or "Default"),
+        multi = false,
+        callback = function(sel)
+            -- callback receives string (selected config)
+            if type(sel) == "string" then
+                selectedLabel.Text = "Selected: " .. sel
+            end
+        end
+    })
+    -- position dropdown
+    local ddCont = configDropdownAPI -- API returned, but we need the actual container to position; we created dropdown as child so find it
+    -- find actual UI element for the dropdown button to place Save/Load
+    -- We assume CreateDropdown placed container as first child of cont; iterate to find TextButton used
+    local dropBtn = nil
+    for _, c in ipairs(cont:GetChildren()) do
+        if c:IsA("Frame") then
+            -- check children textbuttons
+            for _, cc in ipairs(c:GetChildren()) do
+                if cc:IsA("TextButton") and cc.Text ~= "Save" and cc.Text ~= "Load" then
+                    dropBtn = c
+                    break
+                end
+            end
+            if dropBtn then break end
+        end
+    end
+
+    -- Save button
     local saveBtn = UI:CreateButton({ parent = cont, text = "Save", callback = function()
-        local name = tostring(selectedLabel.Text):gsub("Selected:%s*", "")
+        local name = tostring(selectedLabel.Text):gsub("^Selected:%s*", ""):gsub("^Selected:%s*", ""):gsub("^Selected: ", "")
         if name == "" then name = "Default" end
         UI:SaveConfig(name)
+        -- refresh dropdown options
+        local names = listConfigs()
+        UI:CloseOpenPopup()
+        -- Rebuild the dropdown by destroying and recreating the dropdown frame area (simple approach)
+        -- Find existing dropdown frame and remove
+        for _, c in ipairs(cont:GetChildren()) do
+            if c:IsA("Frame") and c ~= cont and c ~= selectedLabel then
+                -- avoid deleting cont and selectedLabel; target previously created dropdown container(s)
+            end
+        end
+        -- update label and refresh UI (we will create a fresh dropdown container)
+        selectedLabel.Text = "Selected: " .. name
+        -- Refresh: find and destroy the old dropdown frame if exists and recreate it
+        for _, c in ipairs(cont:GetChildren()) do
+            if c:IsA("Frame") and c ~= cont then
+                -- heuristic: dropdown container has a child TextButton with default name same as selected; we'll skip safe removal here
+            end
+        end
+        -- For simplicity: create a fresh dropdown in a dedicated container area (below)
+        -- Create a simple visible list of configs as a new dropdown area (we'll use CreateDropdown again)
+        -- First destroy any previous created "ConfigsList" frame
+        for _, c in ipairs(cont:GetChildren()) do
+            if c.Name == "ConfigsList" or c.Name == "ConfigsDropdownBox" then
+                pcall(function() c:Destroy() end)
+            end
+        end
+
+        -- create new dropdown area
+        local listFrame = Instance.new("Frame", cont)
+        listFrame.Name = "ConfigsDropdownBox"
+        listFrame.Size = UDim2.new(0.6, -8, 0, 28)
+        listFrame.Position = UDim2.new(0, 8, 0, 40)
+        listFrame.BackgroundTransparency = 1
+        local api = UI:CreateDropdown({
+            parent = listFrame,
+            text = "Configs",
+            options = listConfigs(),
+            default = name,
+            multi = false,
+            callback = function(sel)
+                if type(sel) == "string" then selectedLabel.Text = "Selected: " .. sel end
+            end
+        })
     end })
     saveBtn.Position = UDim2.new(0.62, 8, 0, 6)
 
+    -- Load button
     local loadBtn = UI:CreateButton({ parent = cont, text = "Load", callback = function()
-        local name = tostring(selectedLabel.Text):gsub("Selected:%s*", "")
+        local name = tostring(selectedLabel.Text):gsub("^Selected:%s*", ""):gsub("^Selected: ", "")
         if name == "" then name = "Default" end
         UI:LoadConfig(name)
     end })
     loadBtn.Position = UDim2.new(0.62, 8, 0, 42)
 
+    -- Delete button
+    local delBtn = UI:CreateButton({ parent = cont, text = "Delete", callback = function()
+        local name = tostring(selectedLabel.Text):gsub("^Selected:%s*", ""):gsub("^Selected: ", "")
+        if name == "" then UI:CreateNotify({ title = "Config", description = "No config selected" }); return end
+        local path = UI.ConfigsFolder .. "/" .. name .. ".json"
+        if delfile and isfile and isfile(path) then
+            pcall(function() delfile(path) end)
+            UI:CreateNotify({ title = "Config", description = "Deleted " .. name })
+            -- refresh dropdown area
+            selectedLabel.Text = "Selected: Default"
+            -- rebuild dropdown area
+            for _, c in ipairs(cont:GetChildren()) do
+                if c.Name == "ConfigsDropdownBox" or c.Name == "ConfigsList" then pcall(function() c:Destroy() end) end
+            end
+            local listFrame = Instance.new("Frame", cont)
+            listFrame.Name = "ConfigsDropdownBox"
+            listFrame.Size = UDim2.new(0.6, -8, 0, 28)
+            listFrame.Position = UDim2.new(0, 8, 0, 40)
+            listFrame.BackgroundTransparency = 1
+            local api = UI:CreateDropdown({
+                parent = listFrame,
+                text = "Configs",
+                options = listConfigs(),
+                default = listConfigs()[1] or "Default",
+                multi = false,
+                callback = function(sel) if type(sel) == "string" then selectedLabel.Text = "Selected: " .. sel end end
+            })
+        else
+            UI:CreateNotify({ title = "Config", description = "Cannot delete: " .. name })
+        end
+    end })
+    delBtn.Position = UDim2.new(0.62, 8, 0, 78)
+
+    -- Save As box and button
     local saveAsBox = Instance.new("TextBox", cont)
     saveAsBox.Size = UDim2.new(0.6, -8, 0, 28)
-    saveAsBox.Position = UDim2.new(0, 8, 0, 42)
+    saveAsBox.Position = UDim2.new(0, 8, 0, 80)
     saveAsBox.BackgroundColor3 = Color3.fromRGB(30,30,30)
     saveAsBox.TextColor3 = Color3.new(1,1,1)
     saveAsBox.PlaceholderText = "Enter config name"
@@ -712,9 +873,27 @@ function UI:CreateConfigManager(tab)
         UI:SaveConfig(name)
         selectedLabel.Text = "Selected: " .. name
         saveAsBox.Text = ""
+        -- refresh dropdown: destroy and recreate
+        for _, c in ipairs(cont:GetChildren()) do
+            if c.Name == "ConfigsDropdownBox" or c.Name == "ConfigsList" then pcall(function() c:Destroy() end) end
+        end
+        local listFrame = Instance.new("Frame", cont)
+        listFrame.Name = "ConfigsDropdownBox"
+        listFrame.Size = UDim2.new(0.6, -8, 0, 28)
+        listFrame.Position = UDim2.new(0, 8, 0, 40)
+        listFrame.BackgroundTransparency = 1
+        local api = UI:CreateDropdown({
+            parent = listFrame,
+            text = "Configs",
+            options = listConfigs(),
+            default = name,
+            multi = false,
+            callback = function(sel) if type(sel) == "string" then selectedLabel.Text = "Selected: " .. sel end end
+        })
     end })
-    saveAsBtn.Position = UDim2.new(0.62, 8, 0, 78)
+    saveAsBtn.Position = UDim2.new(0.62, 8, 0, 116)
 
+    -- Auto Load Toggle
     local autoLoadToggle = UI:CreateToggle({
         parent = cont,
         text = "Auto Load Last Config",
@@ -725,7 +904,22 @@ function UI:CreateConfigManager(tab)
             UI:CreateNotify({ title = "Config Manager", description = "Auto Load is " .. (state and "ON" or "OFF") })
         end
     })
-    autoLoadToggle.Position = UDim2.new(0, 8, 0, 78)
+    autoLoadToggle.Position = UDim2.new(0, 8, 0, 116)
+
+    -- Create initial dropdown in dedicated box
+    local listFrame0 = Instance.new("Frame", cont)
+    listFrame0.Name = "ConfigsDropdownBox"
+    listFrame0.Size = UDim2.new(0.6, -8, 0, 28)
+    listFrame0.Position = UDim2.new(0, 8, 0, 40)
+    listFrame0.BackgroundTransparency = 1
+    UI:CreateDropdown({
+        parent = listFrame0,
+        text = "Configs",
+        options = listConfigs(),
+        default = listConfigs()[1] or "Default",
+        multi = false,
+        callback = function(sel) if type(sel) == "string" then selectedLabel.Text = "Selected: " .. sel end end
+    })
 
     return s
 end
